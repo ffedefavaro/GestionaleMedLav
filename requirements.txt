@@ -1,0 +1,6 @@
+streamlit
+sqlcipher3
+pypdf
+reportlab
+pandas
+openpyxl
