@@ -32,9 +32,13 @@ function App() {
 
   return (
     <Router>
-      <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+      <div className="flex h-screen bg-warmWhite overflow-hidden font-sans text-anthracite">
         <Sidebar />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-warmWhite relative">
+          {/* Glassmorphism Background Accent */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -z-10 animate-pulse" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-accent/5 rounded-full blur-2xl -z-10" />
+
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/aziende" element={<Aziende />} />

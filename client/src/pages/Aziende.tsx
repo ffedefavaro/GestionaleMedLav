@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { Plus, Building2, Search, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 
 const Aziende = () => {
   const [aziende, setAziende] = useState<any[]>([]);
@@ -48,91 +48,92 @@ const Aziende = () => {
   );
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <Building2 className="text-blue-600" /> Gestione Aziende
-        </h1>
+    <div className="p-10 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-10">
+        <div>
+          <h1 className="text-3xl font-black text-primary tracking-tight">Gestione Aziende</h1>
+          <p className="text-gray-500 font-medium">Anagrafica clienti e sedi operative</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"
+          className="btn-accent flex items-center gap-2"
         >
-          <Plus size={20} /> Nuova Azienda
+          <Plus size={20} strokeWidth={3} /> Nuova Azienda
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">Aggiungi Nuova Azienda</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="flex flex-col gap-1 col-span-full">
-              <label className="text-sm font-medium text-gray-600">Ragione Sociale</label>
+        <div className="glass-card p-8 rounded-[32px] mb-10">
+          <h2 className="text-xl font-black text-primary mb-6">Configurazione Nuova Azienda</h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="flex flex-col gap-2 col-span-full">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Ragione Sociale</label>
               <input
                 required
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard"
                 value={formData.ragione_sociale}
                 onChange={e => setFormData({...formData, ragione_sociale: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Partita IVA / CF</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Partita IVA / CF</label>
               <input
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard"
                 value={formData.p_iva}
                 onChange={e => setFormData({...formData, p_iva: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Codice ATECO</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Codice ATECO</label>
               <input
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard font-mono"
                 value={formData.ateco}
                 onChange={e => setFormData({...formData, ateco: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Sede Operativa</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Sede Operativa</label>
               <input
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard"
                 value={formData.sede_operativa}
                 onChange={e => setFormData({...formData, sede_operativa: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Referente Aziendale</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Referente</label>
               <input
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard"
                 value={formData.referente}
                 onChange={e => setFormData({...formData, referente: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">RSPP</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">RSPP</label>
               <input
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard"
                 value={formData.rspp}
                 onChange={e => setFormData({...formData, rspp: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">RLS</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest">RLS</label>
               <input
-                className="border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="input-standard"
                 value={formData.rls}
                 onChange={e => setFormData({...formData, rls: e.target.value})}
               />
             </div>
-            <div className="col-span-full flex justify-end gap-3 mt-4">
+            <div className="col-span-full flex justify-end gap-3 mt-6">
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition"
               >
                 Annulla
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="btn-accent px-10"
               >
                 Salva Azienda
               </button>
@@ -141,37 +142,37 @@ const Aziende = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center gap-3">
-          <Search className="text-gray-400" size={20} />
+      <div className="glass-card rounded-[32px] overflow-hidden p-2">
+        <div className="p-6 flex items-center gap-4">
+          <Search className="text-gray-400" size={24} />
           <input
             placeholder="Cerca per ragione sociale o P.IVA..."
-            className="flex-1 outline-none text-gray-700"
+            className="flex-1 bg-transparent outline-none text-primary font-bold placeholder:text-gray-300"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-200">
+        <table className="table-medical">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Ragione Sociale</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">P.IVA</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Sede</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Referente</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Azioni</th>
+              <th>Ragione Sociale</th>
+              <th>P.IVA / CF</th>
+              <th>Sede</th>
+              <th>Referente</th>
+              <th>Azioni</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {filtered.map((azienda) => (
-              <tr key={azienda.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 text-gray-800 font-medium">{azienda.ragione_sociale}</td>
-                <td className="px-6 py-4 text-gray-600">{azienda.p_iva}</td>
-                <td className="px-6 py-4 text-gray-600 text-sm">{azienda.sede_operativa}</td>
-                <td className="px-6 py-4 text-gray-600">{azienda.referente}</td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2">
-                    <button className="p-1 hover:bg-blue-50 text-blue-600 rounded"><Edit2 size={18} /></button>
-                    <button className="p-1 hover:bg-red-50 text-red-600 rounded"><Trash2 size={18} /></button>
+              <tr key={azienda.id}>
+                <td className="font-black text-primary">{azienda.ragione_sociale}</td>
+                <td className="font-mono text-xs text-gray-500 uppercase">{azienda.p_iva}</td>
+                <td className="text-gray-500 font-medium">{azienda.sede_operativa}</td>
+                <td className="text-gray-600 font-bold">{azienda.referente}</td>
+                <td>
+                  <div className="flex gap-1">
+                    <button className="p-2 hover:bg-white text-tealAction rounded-xl transition-colors"><Edit2 size={18} /></button>
+                    <button className="p-2 hover:bg-accent/10 text-accent rounded-xl transition-colors"><Trash2 size={18} /></button>
                   </div>
                 </td>
               </tr>

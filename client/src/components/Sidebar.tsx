@@ -17,12 +17,14 @@ import { useAppStore } from '../store/useAppStore';
 const SidebarItem = ({ icon: Icon, label, to, active }: { icon: any, label: string, to: string, active: boolean }) => (
   <Link
     to={to}
-    className={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
-      active ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-700'
+    className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${
+      active
+        ? 'bg-accent text-white shadow-lg shadow-accent/20'
+        : 'text-gray-400 hover:bg-white/5 hover:text-white'
     }`}
   >
-    <Icon size={20} />
-    <span className="font-medium">{label}</span>
+    <Icon size={20} strokeWidth={active ? 2.5 : 2} />
+    {label && <span className="font-medium text-sm">{label}</span>}
   </Link>
 );
 
@@ -37,21 +39,28 @@ const Sidebar = () => {
     { icon: Stethoscope, label: 'Nuova Visita', to: '/nuova-visita' },
     { icon: Calendar, label: 'Scadenziario', to: '/scadenziario' },
     { icon: ClipboardList, label: 'Protocolli', to: '/protocolli' },
-    { icon: ShieldAlert, label: 'Sicurezza/RSPP', to: '/sicurezza' },
+    { icon: ShieldAlert, label: 'Sicurezza / RSPP', to: '/sicurezza' },
     { icon: AlertOctagon, label: 'Registro Esposti', to: '/registro-esposti' },
     { icon: Settings, label: 'Impostazioni', to: '/settings' },
   ];
 
   return (
-    <div className={`h-screen bg-white border-r border-gray-200 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} flex flex-col`}>
-      <div className="p-6 flex items-center justify-between border-bottom">
-        {isSidebarOpen && <h1 className="text-xl font-bold text-blue-700">CartSan Lean</h1>}
-        <button onClick={toggleSidebar} className="p-1 rounded-md hover:bg-gray-100">
-          {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+    <div className={`h-screen bg-sidebar transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} flex flex-col text-white shadow-2xl z-50`}>
+      <div className="p-6 flex items-center justify-between mb-4">
+        {isSidebarOpen && (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
+              <Stethoscope size={18} className="text-white" />
+            </div>
+            <h1 className="text-lg font-black tracking-tight uppercase">CartSan</h1>
+          </div>
+        )}
+        <button onClick={toggleSidebar} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+          {isSidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
         </button>
       </div>
 
-      <nav className="flex-1 px-4 space-y-2 mt-4">
+      <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">
         {menuItems.map((item) => (
           <SidebarItem
             key={item.to}
@@ -63,8 +72,13 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-gray-100 text-xs text-gray-400">
-        {isSidebarOpen && <p>© 2024 Medicina del Lavoro</p>}
+      <div className="p-6 border-t border-white/5">
+        {isSidebarOpen && (
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Powered by</p>
+            <p className="text-xs font-medium text-gray-300 italic opacity-60 font-sans">Lean Medical Systems</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,3 +1,50 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-warmWhite text-anthracite selection:bg-accent/20;
+  }
+}
+
+@layer components {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+
+  .glass-card {
+    @apply bg-white/60 backdrop-blur-md border border-white/50 shadow-xl shadow-primary/5;
+  }
+
+  .btn-teal {
+    @apply bg-tealAction text-white px-5 py-2.5 rounded-lg font-bold hover:bg-tealAction/90 active:scale-95 transition-all shadow-lg shadow-tealAction/20;
+  }
+
+  .btn-accent {
+    @apply bg-accent text-white px-5 py-2.5 rounded-lg font-bold hover:bg-accent/90 active:scale-95 transition-all shadow-lg shadow-accent/20;
+  }
+
+  .input-standard {
+    @apply bg-white/50 border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-400;
+  }
+
+  .table-medical {
+    @apply w-full text-left border-separate border-spacing-y-2;
+  }
+  .table-medical th {
+    @apply px-6 py-4 text-[10px] uppercase font-black text-gray-400 tracking-widest;
+  }
+  .table-medical td {
+    @apply px-6 py-4 bg-white border-y border-gray-50 first:border-l first:rounded-l-2xl last:border-r last:rounded-r-2xl text-sm font-medium transition-colors;
+  }
+  .table-medical tr:hover td {
+    @apply bg-primary/5 border-primary/10;
+  }
+}

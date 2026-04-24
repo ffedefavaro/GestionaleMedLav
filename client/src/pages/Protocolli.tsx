@@ -53,28 +53,29 @@ const Protocolli = () => {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <ClipboardList className="text-blue-600" /> Protocolli Sanitari
-        </h1>
+    <div className="p-10 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-10">
+        <div>
+          <h1 className="text-3xl font-black text-primary tracking-tight">Protocolli Sanitari</h1>
+          <p className="text-gray-500 font-medium">Definizione esami per mansione</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"
+          className="btn-teal flex items-center gap-2"
         >
-          <Plus size={20} /> Nuovo Protocollo
+          <Plus size={20} strokeWidth={3} /> Nuovo Protocollo
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">Configura Protocollo per Mansione</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Azienda</label>
+        <div className="glass-card p-8 rounded-[32px] mb-10">
+          <h2 className="text-xl font-black text-primary mb-6">Configura Protocollo</h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Azienda</label>
               <select
                 required
-                className="border border-gray-300 rounded-md p-2"
+                className="input-standard"
                 value={formData.company_id}
                 onChange={e => setFormData({...formData, company_id: e.target.value})}
               >
@@ -82,71 +83,78 @@ const Protocolli = () => {
                 {aziende.map(a => <option key={a.id} value={a.id}>{a.ragione_sociale}</option>)}
               </select>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Mansione / Gruppo Omogeneo</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Mansione / Gruppo Omogeneo</label>
               <input
                 required
                 placeholder="es. Impiegato Video-terminalista"
-                className="border border-gray-300 rounded-md p-2"
+                className="input-standard"
                 value={formData.mansione}
                 onChange={e => setFormData({...formData, mansione: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1 md:col-span-2">
-              <label className="text-sm font-medium text-gray-600">Esami Previsti (separati da virgola)</label>
+            <div className="flex flex-col gap-2 md:col-span-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Esami Previsti (separati da virgola)</label>
               <textarea
                 required
                 placeholder="es. Visita Medica, Audiometria, Spirometria, Ergoftalmologia"
-                className="border border-gray-300 rounded-md p-2 h-20"
+                className="input-standard h-24"
                 value={formData.esami}
                 onChange={e => setFormData({...formData, esami: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Periodicità (mesi)</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Periodicità (mesi)</label>
               <input
                 type="number"
-                className="border border-gray-300 rounded-md p-2"
+                className="input-standard font-black"
                 value={formData.periodicita_mesi}
                 onChange={e => setFormData({...formData, periodicita_mesi: parseInt(e.target.value)})}
               />
             </div>
-            <div className="md:col-span-2 flex justify-end gap-3 mt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600">Annulla</button>
-              <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg">Salva Protocollo</button>
+            <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+              <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2 text-gray-400 font-bold hover:text-primary transition">Annulla</button>
+              <button type="submit" className="btn-teal px-10">Salva Protocollo</button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {protocolli.map(p => (
-          <div key={p.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="flex justify-between items-start mb-3">
+          <div key={p.id} className="bg-white p-7 rounded-[32px] border border-white shadow-lg hover:shadow-2xl transition-all group relative overflow-hidden">
+            <div className="flex justify-between items-start mb-6">
               <div>
-                <h3 className="font-bold text-gray-800">{p.mansione}</h3>
-                <div className="text-xs text-blue-600 flex items-center gap-1 mt-1">
-                  <Building2 size={12} /> {p.azienda}
+                <h3 className="font-black text-primary text-lg tracking-tight mb-1">{p.mansione}</h3>
+                <div className="text-[10px] font-black text-tealAction flex items-center gap-1 uppercase tracking-widest bg-tealAction/5 px-2 py-1 rounded-full w-fit">
+                  <Building2 size={10} /> {p.azienda}
                 </div>
               </div>
-              <button onClick={() => handleDelete(p.id)} className="text-gray-400 hover:text-red-600 transition">
-                <Trash2 size={18} />
+              <button onClick={() => handleDelete(p.id)} className="p-2 text-gray-300 hover:text-accent transition-colors">
+                <Trash2 size={20} />
               </button>
             </div>
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Esami</div>
+            <div className="space-y-3">
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Esami del Protocollo</div>
               <div className="flex flex-wrap gap-2">
                 {p.esami.split(',').map((e: string, i: number) => (
-                  <span key={i} className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                  <span key={i} className="bg-primary/5 text-primary px-3 py-1.5 rounded-xl text-xs font-bold border border-primary/5 group-hover:bg-primary/10 transition-colors">
                     {e.trim()}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
-              <span className="text-sm text-gray-500">Periodicità</span>
-              <span className="text-sm font-semibold text-gray-700">{p.periodicita_mesi} mesi</span>
+            <div className="mt-8 pt-6 border-t border-gray-50 flex justify-between items-center">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-gray-300 uppercase">Periodicità</span>
+                <span className="text-lg font-black text-primary">{p.periodicita_mesi} mesi</span>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
+                <ClipboardList size={22} />
+              </div>
             </div>
+            {/* Visual accent */}
+            <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 -mr-8 -mt-8 rounded-full blur-xl" />
           </div>
         ))}
       </div>

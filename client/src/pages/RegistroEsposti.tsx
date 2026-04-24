@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { executeQuery } from '../lib/db';
-import { Shield, Search, Download } from 'lucide-react';
+import { Search, Download } from 'lucide-react';
 
 const RegistroEsposti = () => {
   const [esposti, setEsposti] = useState<any[]>([]);
@@ -34,46 +34,47 @@ const RegistroEsposti = () => {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <Shield className="text-red-600" /> Registro Esposti (Cancerogeni/Biologici)
-        </h1>
-        <button onClick={exportCSV} className="bg-gray-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm">
-          <Download size={18} /> Esporta Registro
+    <div className="p-10 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-10">
+        <div>
+          <h1 className="text-3xl font-black text-primary tracking-tight">Registro Esposti</h1>
+          <p className="text-gray-500 font-medium">Monitoraggio agenti cancerogeni e biologici</p>
+        </div>
+        <button onClick={exportCSV} className="btn-accent bg-anthracite flex items-center gap-2">
+          <Download size={18} strokeWidth={3} /> Esporta Registro
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center gap-3">
-          <Search className="text-gray-400" size={20} />
+      <div className="glass-card rounded-[32px] overflow-hidden p-2">
+        <div className="p-6 flex items-center gap-4">
+          <Search className="text-gray-400" size={24} />
           <input
-            placeholder="Filtra per nome o rischio..."
-            className="flex-1 outline-none text-gray-700"
+            placeholder="Filtra per nome o rischio specifico..."
+            className="flex-1 bg-transparent outline-none text-primary font-bold placeholder:text-gray-300"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+        <table className="table-medical">
+          <thead>
             <tr>
-              <th className="px-6 py-3 font-semibold text-gray-600">Lavoratore</th>
-              <th className="px-6 py-3 font-semibold text-gray-600">Azienda</th>
-              <th className="px-6 py-3 font-semibold text-gray-600">Fattori di Rischio</th>
+              <th>Lavoratore</th>
+              <th>Azienda</th>
+              <th>Fattori di Rischio</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {filtered.map((e, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <div className="font-bold">{e.cognome} {e.nome}</div>
-                  <div className="text-xs text-gray-400">{e.codice_fiscale}</div>
+              <tr key={idx}>
+                <td>
+                  <div className="font-black text-primary">{e.cognome} {e.nome}</div>
+                  <div className="font-mono text-[10px] text-gray-400">{e.codice_fiscale}</div>
                 </td>
-                <td className="px-6 py-4 text-gray-600">{e.azienda}</td>
-                <td className="px-6 py-4">
+                <td className="text-gray-500 font-bold">{e.azienda}</td>
+                <td>
                   <div className="flex flex-wrap gap-1">
                     {JSON.parse(e.rischi).map((r: string, i: number) => (
-                      <span key={i} className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-100">
+                      <span key={i} className="bg-red-50 text-red-600 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-tighter border border-red-100">
                         {r}
                       </span>
                     ))}

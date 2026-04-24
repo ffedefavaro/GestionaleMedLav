@@ -83,105 +83,108 @@ const Settings = () => {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-8">
-        <Shield className="text-blue-600" /> Impostazioni e Sicurezza
-      </h1>
+    <div className="p-10 max-w-5xl mx-auto">
+      <div className="mb-10">
+        <h1 className="text-3xl font-black text-primary tracking-tight">Impostazioni Sistema</h1>
+        <p className="text-gray-500 font-medium mt-1">Configurazione profilo e gestione dati locali</p>
+      </div>
 
-      <div className="space-y-8">
+      <div className="space-y-10">
         {/* Doctor Profile */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b border-gray-200 font-semibold flex items-center gap-2">
-            <User size={18} className="text-blue-500" /> Profilo Medico Competente
+        <div className="glass-card rounded-[40px] overflow-hidden">
+          <div className="p-6 bg-primary/5 border-b border-primary/5 font-black text-primary flex items-center gap-3 uppercase tracking-widest text-xs">
+            <User size={18} className="text-primary" strokeWidth={3} /> Profilo Medico Competente
           </div>
-          <form onSubmit={handleSaveProfile} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1 col-span-full">
-              <label className="text-sm font-medium text-gray-600">Nome e Cognome</label>
+          <form onSubmit={handleSaveProfile} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex flex-col gap-2 col-span-full">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome e Cognome Professionale</label>
               <input
-                className="border rounded-md p-2"
+                className="input-standard font-black"
                 value={doctor.nome}
                 onChange={e => setDoctor({...doctor, nome: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Specializzazione</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Specializzazione</label>
               <input
-                className="border rounded-md p-2"
+                className="input-standard font-bold"
                 value={doctor.specializzazione}
                 onChange={e => setDoctor({...doctor, specializzazione: e.target.value})}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">N. Iscrizione Ordine</label>
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">N. Iscrizione Ordine</label>
               <input
-                className="border rounded-md p-2"
+                className="input-standard font-mono"
                 value={doctor.n_iscrizione}
                 onChange={e => setDoctor({...doctor, n_iscrizione: e.target.value})}
               />
             </div>
-            <div className="col-span-full flex justify-end">
-              <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
-                <Save size={18} /> Salva Profilo
+            <div className="col-span-full flex justify-end mt-4">
+              <button type="submit" className="btn-teal flex items-center gap-2 px-10">
+                <Save size={18} strokeWidth={3} /> Aggiorna Profilo
               </button>
             </div>
           </form>
         </div>
 
         {/* Google API Integration */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b border-gray-200 font-semibold flex items-center gap-2">
-            <Shield size={18} className="text-orange-500" /> Integrazione Google API (Gmail/Calendar)
+        <div className="glass-card rounded-[40px] overflow-hidden border-accent/20">
+          <div className="p-6 bg-accent/5 border-b border-accent/10 font-black text-accent flex items-center gap-3 uppercase tracking-widest text-xs">
+            <Shield size={18} strokeWidth={3} /> Integrazione Google API
           </div>
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Client ID</label>
-              <input
-                className="border rounded-md p-2 font-mono text-xs"
-                value={googleConfig.clientId}
-                onChange={e => setGoogleConfig({...googleConfig, clientId: e.target.value})}
-                placeholder="xxxxxx.apps.googleusercontent.com"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-600">Client Secret</label>
-              <input
-                type="password"
-                className="border rounded-md p-2 font-mono text-xs"
-                value={googleConfig.clientSecret}
-                onChange={e => setGoogleConfig({...googleConfig, clientSecret: e.target.value})}
-              />
+          <div className="p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Client ID OAuth2</label>
+                <input
+                  className="input-standard font-mono text-xs border-accent/10"
+                  value={googleConfig.clientId}
+                  onChange={e => setGoogleConfig({...googleConfig, clientId: e.target.value})}
+                  placeholder="xxxxxx.apps.googleusercontent.com"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Client Secret</label>
+                <input
+                  type="password"
+                  className="input-standard font-mono text-xs border-accent/10"
+                  value={googleConfig.clientSecret}
+                  onChange={e => setGoogleConfig({...googleConfig, clientSecret: e.target.value})}
+                />
+              </div>
             </div>
             <div className="flex justify-end">
               <button
                 onClick={saveGoogleConfig}
-                className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition"
+                className="btn-accent flex items-center gap-2 px-10"
               >
-                Salva Configurazione Google
+                Salva Credenziali Google
               </button>
             </div>
           </div>
         </div>
 
         {/* Audit Log */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b border-gray-200 font-semibold flex items-center gap-2">
-            <History size={18} className="text-purple-500" /> Registro Audit (Tracciabilità Legale)
+        <div className="glass-card rounded-[40px] overflow-hidden">
+          <div className="p-6 bg-anthracite/5 border-b border-anthracite/5 font-black text-anthracite flex items-center gap-3 uppercase tracking-widest text-xs">
+            <History size={18} strokeWidth={3} /> Registro Tracciabilità (Audit)
           </div>
-          <div className="p-0 max-h-64 overflow-y-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-100 sticky top-0">
+          <div className="p-0 max-h-64 overflow-y-auto custom-scrollbar">
+            <table className="table-medical !border-none">
+              <thead className="sticky top-0 bg-warmWhite z-10">
                 <tr>
-                  <th className="px-4 py-2">Data/Ora</th>
-                  <th className="px-4 py-2">Azione</th>
-                  <th className="px-4 py-2">Dettagli</th>
+                  <th>Data/Ora</th>
+                  <th>Azione</th>
+                  <th>Dettagli Operazione</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody>
                 {logs.map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 whitespace-nowrap text-gray-500">{log.timestamp}</td>
-                    <td className="px-4 py-2 font-bold">{log.action}</td>
-                    <td className="px-4 py-2 text-gray-600">{log.details}</td>
+                  <tr key={log.id}>
+                    <td className="font-mono text-[10px] text-gray-400">{log.timestamp}</td>
+                    <td><span className="bg-primary/5 text-primary px-2 py-0.5 rounded font-black text-[10px]">{log.action}</span></td>
+                    <td className="text-gray-500 font-medium">{log.details}</td>
                   </tr>
                 ))}
               </tbody>
@@ -190,32 +193,32 @@ const Settings = () => {
         </div>
 
         {/* Database Management */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b border-gray-200 font-semibold flex items-center gap-2">
-            <Database size={18} className="text-green-500" /> Gestione Dati e Backup
+        <div className="glass-card rounded-[40px] overflow-hidden border-red-600/10">
+          <div className="p-6 bg-red-600/5 border-b border-red-600/5 font-black text-red-600 flex items-center gap-3 uppercase tracking-widest text-xs">
+            <Database size={18} strokeWidth={3} /> Manutenzione Database Locale
           </div>
-          <div className="p-6 flex flex-wrap gap-4">
+          <div className="p-8 flex flex-wrap gap-6 items-center">
             <button
               onClick={handleExportDB}
-              className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-lg border border-green-200 hover:bg-green-100"
+              className="flex items-center gap-3 bg-white border border-gray-100 text-primary font-black px-6 py-4 rounded-2xl shadow-lg hover:shadow-primary/5 transition-all"
             >
-              <Download size={18} /> Esporta Backup (.sqlite)
+              <Download size={20} /> Esporta Backup (.sqlite)
             </button>
 
-            <label className="flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 hover:bg-blue-100 cursor-pointer">
-              <Upload size={18} /> Importa Database
+            <label className="flex items-center gap-3 bg-white border border-gray-100 text-tealAction font-black px-6 py-4 rounded-2xl shadow-lg hover:shadow-tealAction/5 transition-all cursor-pointer">
+              <Upload size={20} /> Importa Database
               <input type="file" className="hidden" accept=".sqlite" onChange={handleImportDB} />
             </label>
 
             <button
               onClick={clearDB}
-              className="flex items-center gap-2 bg-red-50 text-red-700 px-4 py-2 rounded-lg border border-red-200 hover:bg-red-100 ml-auto"
+              className="flex items-center gap-3 text-red-600/40 hover:text-red-600 font-black px-6 py-4 rounded-2xl ml-auto transition-all"
             >
-              <Trash2 size={18} /> Elimina Tutti i Dati
+              <Trash2 size={20} /> Elimina Dati
             </button>
           </div>
-          <div className="px-6 pb-6 text-xs text-gray-400">
-            I dati vengono salvati automaticamente nel browser. Si consiglia di effettuare un backup regolare per evitare perdite di dati in caso di pulizia della cache.
+          <div className="px-8 pb-8 flex items-center gap-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+            <Shield size={12} /> Persistenza garantita su IndexedDB V2
           </div>
         </div>
       </div>

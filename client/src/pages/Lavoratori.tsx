@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { Plus, Users, Search, Edit2, Trash2, Filter, ClipboardList } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Filter, ClipboardList } from 'lucide-react';
 import StoricoLavoratore from './StoricoLavoratore';
 
 const Lavoratori = () => {
@@ -72,22 +72,23 @@ const Lavoratori = () => {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <Users className="text-blue-600" /> Gestione Lavoratori
-        </h1>
+    <div className="p-10 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-10">
+        <div>
+          <h1 className="text-3xl font-black text-primary tracking-tight">Gestione Lavoratori</h1>
+          <p className="text-gray-500 font-medium">Anagrafica esposti e sorveglianza</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition"
+          className="btn-teal flex items-center gap-2"
         >
-          <Plus size={20} /> Nuovo Lavoratore
+          <Plus size={20} strokeWidth={3} /> Nuovo Lavoratore
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">Aggiungi Nuovo Lavoratore</h2>
+        <div className="glass-card p-8 rounded-[32px] mb-10">
+          <h2 className="text-xl font-black text-primary mb-6">Aggiungi Nuovo Lavoratore</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-600">Azienda</label>
@@ -158,8 +159,8 @@ const Lavoratori = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex flex-wrap items-center gap-4">
+      <div className="glass-card rounded-[32px] overflow-hidden p-2">
+        <div className="p-6 flex flex-wrap items-center gap-6">
           <div className="flex-1 flex items-center gap-3 min-w-[300px]">
             <Search className="text-gray-400" size={20} />
             <input
@@ -181,28 +182,28 @@ const Lavoratori = () => {
             </select>
           </div>
         </div>
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-200">
+        <table className="table-medical">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Lavoratore</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Codice Fiscale</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Azienda</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Mansione</th>
-              <th className="px-6 py-3 text-sm font-semibold text-gray-600">Azioni</th>
+              <th>Lavoratore</th>
+              <th>Codice Fiscale</th>
+              <th>Azienda</th>
+              <th>Mansione</th>
+              <th>Azioni</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {filtered.map((l) => (
-              <tr key={l.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <div className="font-medium text-gray-800">{l.cognome} {l.nome}</div>
-                  <div className="text-xs text-gray-500">{l.email || 'Email non inserita'}</div>
+              <tr key={l.id}>
+                <td>
+                  <div className="font-black text-primary">{l.cognome} {l.nome}</div>
+                  <div className="text-[10px] text-gray-400 font-bold uppercase">{l.email || 'No Email'}</div>
                 </td>
-                <td className="px-6 py-4 text-gray-600 text-sm font-mono">{l.codice_fiscale}</td>
-                <td className="px-6 py-4 text-gray-600">{l.azienda}</td>
-                <td className="px-6 py-4 text-gray-600">{l.mansione}</td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2">
+                <td className="font-mono text-xs text-gray-500">{l.codice_fiscale}</td>
+                <td className="text-gray-600 font-bold">{l.azienda}</td>
+                <td className="text-gray-500">{l.mansione}</td>
+                <td>
+                  <div className="flex gap-1">
                     <button
                       onClick={() => setSelectedForHistory(l.id)}
                       className="p-1 hover:bg-blue-50 text-blue-600 rounded" title="Visualizza Cartella"

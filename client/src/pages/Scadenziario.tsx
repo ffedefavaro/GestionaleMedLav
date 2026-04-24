@@ -45,34 +45,35 @@ const Scadenziario = () => {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <CalendarIcon className="text-blue-600" /> Scadenziario Visite
-        </h1>
+    <div className="p-10 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-10">
+        <div>
+          <h1 className="text-3xl font-black text-primary tracking-tight">Scadenziario Visite</h1>
+          <p className="text-gray-500 font-medium">Pianificazione sorveglianza sanitaria</p>
+        </div>
         <div className="flex gap-4">
           <button
             onClick={export3B}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm text-sm"
+            className="btn-teal flex items-center gap-2 bg-primary shadow-primary/20"
           >
-            <FileSpreadsheet size={18} /> Esporta Allegato 3B
+            <FileSpreadsheet size={18} /> Allegato 3B
           </button>
-          <div className="flex bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+          <div className="flex bg-white/50 backdrop-blur-sm border border-gray-100 rounded-2xl p-1.5 shadow-inner">
             <button
               onClick={() => setFilter('all')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filter === 'all' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-gray-400 hover:text-primary'}`}
             >
               Tutte
             </button>
             <button
               onClick={() => setFilter('upcoming')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'upcoming' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filter === 'upcoming' ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'text-gray-400 hover:text-accent'}`}
             >
-              In Scadenza (30gg)
+              In Scadenza
             </button>
             <button
               onClick={() => setFilter('expired')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'expired' ? 'bg-red-50 text-red-600' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filter === 'expired' ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-gray-400 hover:text-red-600'}`}
             >
               Scadute
             </button>
@@ -80,57 +81,57 @@ const Scadenziario = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-200">
+      <div className="glass-card rounded-[32px] overflow-hidden p-2">
+        <table className="table-medical">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Lavoratore</th>
-              <th className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Azienda</th>
-              <th className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Ultima Visita</th>
-              <th className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Prossima Scadenza</th>
-              <th className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Stato</th>
-              <th className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Azioni</th>
+              <th>Lavoratore</th>
+              <th>Azienda</th>
+              <th>Ultima Visita</th>
+              <th>Prossima Scadenza</th>
+              <th>Stato</th>
+              <th>Azioni</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {filtered.map((v) => {
               const expiry = new Date(v.scadenza_prossima);
               const isExpired = isBefore(expiry, today);
               const isUpcoming = isAfter(expiry, today) && isBefore(expiry, next30Days);
 
               return (
-                <tr key={v.id} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-gray-800">{v.cognome} {v.nome}</div>
-                    <div className="text-xs text-gray-500">{v.mansione}</div>
+                <tr key={v.id}>
+                  <td>
+                    <div className="font-black text-primary">{v.cognome} {v.nome}</div>
+                    <div className="text-[10px] text-gray-400 font-bold uppercase">{v.mansione}</div>
                   </td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">{v.azienda}</td>
-                  <td className="px-6 py-4 text-gray-500 text-sm">{v.data_visita}</td>
-                  <td className={`px-6 py-4 text-sm font-semibold ${isExpired ? 'text-red-600' : isUpcoming ? 'text-orange-600' : 'text-gray-700'}`}>
+                  <td className="text-gray-500 font-bold">{v.azienda}</td>
+                  <td className="text-gray-400 text-xs">{v.data_visita}</td>
+                  <td className={`font-black ${isExpired ? 'text-red-600' : isUpcoming ? 'text-accent' : 'text-primary'}`}>
                     {v.scadenza_prossima}
                   </td>
-                  <td className="px-6 py-4">
+                  <td>
                     {isExpired ? (
-                      <span className="bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
-                        <Bell size={12} /> SCADUTA
+                      <span className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 w-fit border border-red-100">
+                        <Bell size={10} strokeWidth={3} /> Scaduta
                       </span>
                     ) : isUpcoming ? (
-                      <span className="bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
-                        <Clock size={12} /> IN SCADENZA
+                      <span className="bg-accent/5 text-accent px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 w-fit border border-accent/10">
+                        <Clock size={10} strokeWidth={3} /> In Scadenza
                       </span>
                     ) : (
-                      <span className="bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full text-xs font-bold w-fit">
-                        REGOLARE
+                      <span className="bg-tealAction/5 text-tealAction px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter w-fit border border-tealAction/10">
+                        Regolare
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md" title="Invia Convocazione Mail">
-                        <Mail size={18} />
+                  <td>
+                    <div className="flex gap-1">
+                      <button className="p-2 hover:bg-white text-tealAction rounded-xl transition-colors" title="Invia Convocazione">
+                        <Mail size={16} />
                       </button>
-                      <button className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-md" title="Sincronizza Google Calendar">
-                        <ExternalLink size={18} />
+                      <button className="p-2 hover:bg-white text-primary rounded-xl transition-colors" title="Google Calendar">
+                        <ExternalLink size={16} />
                       </button>
                     </div>
                   </td>
