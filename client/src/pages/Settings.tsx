@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand, getDB } from '../lib/db';
-import { User, Shield, Database, Save, Upload, Trash2, Download } from 'lucide-react';
+import { User, Shield, Database, Save, Upload, Trash2, Download, History } from 'lucide-react';
 
 const Settings = () => {
   const [doctor, setDoctor] = useState({
@@ -15,11 +15,15 @@ const Settings = () => {
     clientSecret: localStorage.getItem('google_client_secret') || ''
   });
 
+  const [logs, setLogs] = useState<any[]>([]);
+
   useEffect(() => {
     const data = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
     if (data.length > 0) {
       setDoctor(data[0]);
     }
+    const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
+    setLogs(auditLogs);
   }, []);
 
   const saveGoogleConfig = () => {
@@ -155,6 +159,33 @@ const Settings = () => {
                 Salva Configurazione Google
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Audit Log */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-4 bg-gray-50 border-b border-gray-200 font-semibold flex items-center gap-2">
+            <History size={18} className="text-purple-500" /> Registro Audit (Tracciabilità Legale)
+          </div>
+          <div className="p-0 max-h-64 overflow-y-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr>
+                  <th className="px-4 py-2">Data/Ora</th>
+                  <th className="px-4 py-2">Azione</th>
+                  <th className="px-4 py-2">Dettagli</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {logs.map(log => (
+                  <tr key={log.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 whitespace-nowrap text-gray-500">{log.timestamp}</td>
+                    <td className="px-4 py-2 font-bold">{log.action}</td>
+                    <td className="px-4 py-2 text-gray-600">{log.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

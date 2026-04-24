@@ -32,6 +32,11 @@ const Aziende = () => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls]
     );
+
+    // Audit log for legal compliance
+    await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+      ["INSERT", "companies", `Nuova azienda: ${formData.ragione_sociale}`]);
+
     setShowForm(false);
     setFormData({ ragione_sociale: '', p_iva: '', ateco: '', sede_operativa: '', referente: '', rspp: '', rls: '' });
     fetchAziende();

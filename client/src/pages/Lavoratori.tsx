@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { Plus, Users, Search, Edit2, Trash2, Filter, ClipboardList } from 'lucide-react';
+import StoricoLavoratore from './StoricoLavoratore';
 
 const Lavoratori = () => {
   const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const [selectedForHistory, setSelectedForHistory] = useState<number | null>(null);
   const [aziende, setAziende] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAzienda, setSelectedAzienda] = useState<string>('all');
 
+  const [rischiMaster, setRischiMaster] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     company_id: '',
     nome: '',
@@ -17,7 +20,8 @@ const Lavoratori = () => {
     email: '',
     data_nascita: '',
     mansione: '',
-    data_assunzione: ''
+    data_assunzione: '',
+    rischi: [] as string[]
   });
 
   const fetchData = () => {
@@ -28,8 +32,10 @@ const Lavoratori = () => {
       ORDER BY cognome ASC
     `);
     const a = executeQuery("SELECT id, ragione_sociale FROM companies ORDER BY ragione_sociale ASC");
+    const r = executeQuery("SELECT * FROM risks_master ORDER BY categoria, nome");
     setLavoratori(l);
     setAziende(a);
+    setRischiMaster(r);
   };
 
   useEffect(() => {
@@ -39,12 +45,19 @@ const Lavoratori = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await runCommand(
-      `INSERT INTO workers (company_id, nome, cognome, codice_fiscale, email, data_nascita, mansione, data_assunzione)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale, formData.email, formData.data_nascita, formData.mansione, formData.data_assunzione]
+      `INSERT INTO workers (company_id, nome, cognome, codice_fiscale, email, data_nascita, mansione, data_assunzione, rischi)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale, formData.email, formData.data_nascita, formData.mansione, formData.data_assunzione, JSON.stringify(formData.rischi)]
     );
+
+    // Log action for legal audit
+    await runCommand(
+      "INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+      ["INSERT", "workers", `Nuovo lavoratore: ${formData.cognome} ${formData.nome}`]
+    );
+
     setShowForm(false);
-    setFormData({ company_id: '', nome: '', cognome: '', codice_fiscale: '', email: '', data_nascita: '', mansione: '', data_assunzione: '' });
+    setFormData({ company_id: '', nome: '', cognome: '', codice_fiscale: '', email: '', data_nascita: '', mansione: '', data_assunzione: '', rischi: [] });
     fetchData();
   };
 
@@ -53,6 +66,10 @@ const Lavoratori = () => {
     const matchesAzienda = selectedAzienda === 'all' || l.company_id.toString() === selectedAzienda;
     return matchesSearch && matchesAzienda;
   });
+
+  if (selectedForHistory) {
+    return <StoricoLavoratore workerId={selectedForHistory} onBack={() => setSelectedForHistory(null)} />;
+  }
 
   return (
     <div className="p-8">
@@ -113,6 +130,26 @@ const Lavoratori = () => {
               <input type="date" className="border border-gray-300 rounded-md p-2" value={formData.data_assunzione} onChange={e => setFormData({...formData, data_assunzione: e.target.value})} />
             </div>
 
+            <div className="col-span-full border-t pt-4 mt-2">
+              <label className="text-sm font-bold text-gray-700 mb-2 block uppercase tracking-wide">Fattori di Rischio Espositivi (DVR)</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl">
+                {rischiMaster.map(r => (
+                  <label key={r.id} className="flex items-center gap-2 text-xs text-gray-600 hover:bg-white p-1 rounded transition cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={formData.rischi.includes(r.nome)}
+                      onChange={e => {
+                        if (e.target.checked) setFormData({...formData, rischi: [...formData.rischi, r.nome]});
+                        else setFormData({...formData, rischi: formData.rischi.filter(x => x !== r.nome)});
+                      }}
+                    />
+                    <span>{r.nome} <span className="text-[10px] text-gray-400">({r.categoria})</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="col-span-full flex justify-end gap-3 mt-4">
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Annulla</button>
               <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Salva Lavoratore</button>
@@ -166,7 +203,12 @@ const Lavoratori = () => {
                 <td className="px-6 py-4 text-gray-600">{l.mansione}</td>
                 <td className="px-6 py-4">
                   <div className="flex gap-2">
-                    <button className="p-1 hover:bg-blue-50 text-blue-600 rounded" title="Visualizza Cartella"><ClipboardList size={18} /></button>
+                    <button
+                      onClick={() => setSelectedForHistory(l.id)}
+                      className="p-1 hover:bg-blue-50 text-blue-600 rounded" title="Visualizza Cartella"
+                    >
+                      <ClipboardList size={18} />
+                    </button>
                     <button className="p-1 hover:bg-blue-50 text-blue-600 rounded"><Edit2 size={18} /></button>
                     <button className="p-1 hover:bg-red-50 text-red-600 rounded"><Trash2 size={18} /></button>
                   </div>

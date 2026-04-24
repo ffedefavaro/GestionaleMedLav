@@ -114,12 +114,62 @@ const createTables = (database: Database) => {
       FOREIGN KEY (visit_id) REFERENCES visits(id)
     );
 
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      action TEXT,
+      table_name TEXT,
+      resource_id INTEGER,
+      details TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS risks_master (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT UNIQUE,
+      categoria TEXT -- fisico, chimico, biologico, etc.
+    );
+
+    CREATE TABLE IF NOT EXISTS training_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER,
+      corso TEXT,
+      data_completamento DATE,
+      scadenza DATE,
+      FOREIGN KEY (worker_id) REFERENCES workers(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ppe_assigned (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER,
+      dispositivo TEXT,
+      data_consegna DATE,
+      scadenza_sostituzione DATE,
+      FOREIGN KEY (worker_id) REFERENCES workers(id)
+    );
+
+    -- Try to update visits for legal finalization
+    try {
+      database.run("ALTER TABLE visits ADD COLUMN finalized INTEGER DEFAULT 0;");
+    } catch (e) {}
+
+    -- Initialize risks_master if empty
+    const risksCount = database.exec("SELECT count(*) FROM risks_master")[0].values[0][0];
+    if (risksCount === 0) {
+      const standardRisks = [
+        ['Rumore', 'fisico'], ['Vibrazioni', 'fisico'], ['Radiazioni', 'fisico'],
+        ['Movimentazione Carichi', 'ergonomico'], ['Video-terminalisti', 'ergonomico'],
+        ['Agenti Chimici', 'chimico'], ['Agenti Biologici', 'biologico'],
+        ['Lavoro Notturno', 'organizzativo'], ['Stress Lavoro Correlato', 'psicosociale']
+      ];
+      standardRisks.forEach(r => {
+        database.run("INSERT INTO risks_master (nome, categoria) VALUES (?, ?)", r);
+      });
+    }
+
     -- Try to add email column if it doesn't exist (migration)
     try {
       database.run("ALTER TABLE workers ADD COLUMN email TEXT;");
-    } catch (e) {
-      // Column might already exist
-    }
+    } catch (e) {}
   `);
 };
 

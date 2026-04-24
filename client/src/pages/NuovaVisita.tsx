@@ -25,6 +25,7 @@ const NuovaVisita = () => {
     esame_obiettivo: '',
     giudizio: 'idoneo',
     prescrizioni: '',
+    accertamenti_effettuati: '',
     scadenza_prossima: '',
     peso: 70,
     altezza: 170,
@@ -104,22 +105,29 @@ const NuovaVisita = () => {
   const handleSave = async () => {
     // 1. Insert Visit
     await runCommand(`
-      INSERT INTO visits (worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica, esame_obiettivo, giudizio, prescrizioni, scadenza_prossima)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO visits (worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica, esame_obiettivo, giudizio, prescrizioni, scadenza_prossima, finalized)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `, [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
       visitForm.anamnesi_lavorativa, visitForm.anamnesi_familiare, visitForm.anamnesi_patologica,
       visitForm.esame_obiettivo, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
     ]);
 
+    const lastVisitData = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
+
+    // Log action for legal audit
+    await runCommand(
+      "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+      ["FINALIZE", "visits", lastVisitData.id, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
+    );
+
     // 2. Insert Biometrics (simplified lastrowid logic for this demo since we use sql.js)
-    const lastVisit = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
-    if (lastVisit) {
+    if (lastVisitData) {
       const bmi = visitForm.peso / ((visitForm.altezza/100) ** 2);
       await runCommand(`
         INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [lastVisit.id, visitForm.peso, visitForm.altezza, bmi, visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza]);
+      `, [lastVisitData.id, visitForm.peso, visitForm.altezza, bmi, visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza]);
     }
 
     alert("Visita salvata con successo!");
@@ -203,6 +211,11 @@ const NuovaVisita = () => {
     cartella.text(`Pressione: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg | FC: ${visitForm.frequenza} bpm`, 20, 163);
     cartella.text("Esame Obiettivo:", 20, 170);
     cartella.text(visitForm.esame_obiettivo || "Regolare", 25, 176, { maxWidth: 165 });
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("ACCERTAMENTI STRUMENTALI:", 20, 200);
+    cartella.setFont("helvetica", "normal");
+    cartella.text(visitForm.accertamenti_effettuati || "Non eseguiti", 25, 206, { maxWidth: 165 });
 
     cartella.setFont("helvetica", "bold");
     cartella.text("SEZIONE 4: GIUDIZIO DI IDONEITA", 15, 200);
@@ -346,15 +359,26 @@ const NuovaVisita = () => {
 
         {step === 3 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold flex items-center gap-2"><Activity className="text-blue-500" /> Esame Obiettivo</h2>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium">Risultanze Esame Obiettivo</label>
-              <textarea
-                placeholder="es. Torace normoconformato, MV presente su tutto l'ambito, toni cardiaci puri..."
-                className="border border-gray-300 rounded-md p-2 h-40"
-                value={visitForm.esame_obiettivo}
-                onChange={e => setVisitForm({...visitForm, esame_obiettivo: e.target.value})}
-              />
+            <h2 className="text-xl font-semibold flex items-center gap-2"><Activity className="text-blue-500" /> Esame Obiettivo e Accertamenti</h2>
+            <div className="grid grid-cols-1 gap-6">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Accertamenti Strumentali Effettuati</label>
+                <textarea
+                  placeholder="es. Audiometria (normale), Spirometria (FVC 95%), ECG (ritmo sinusale)..."
+                  className="border border-gray-300 rounded-md p-2 h-24"
+                  value={visitForm.accertamenti_effettuati}
+                  onChange={e => setVisitForm({...visitForm, accertamenti_effettuati: e.target.value})}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Risultanze Esame Obiettivo</label>
+                <textarea
+                  placeholder="es. Torace normoconformato, MV presente su tutto l'ambito, toni cardiaci puri..."
+                  className="border border-gray-300 rounded-md p-2 h-40"
+                  value={visitForm.esame_obiettivo}
+                  onChange={e => setVisitForm({...visitForm, esame_obiettivo: e.target.value})}
+                />
+              </div>
             </div>
             <div className="flex justify-between mt-8">
               <button onClick={() => setStep(2)} className="text-gray-500">Indietro</button>

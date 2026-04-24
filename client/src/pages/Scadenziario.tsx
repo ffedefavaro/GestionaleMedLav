@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { executeQuery } from '../lib/db';
-import { Calendar as CalendarIcon, Clock, Bell, Mail, ExternalLink } from 'lucide-react';
+import { executeQuery, runCommand } from '../lib/db';
+import { Calendar as CalendarIcon, Clock, Bell, Mail, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { isAfter, isBefore, addDays } from 'date-fns';
 
 const Scadenziario = () => {
@@ -29,31 +29,54 @@ const Scadenziario = () => {
     return true;
   });
 
+  const export3B = async () => {
+    // Basic CSV export for Allegato 3B
+    const headers = ["CF Lavoratore", "Data Visita", "Tipo Visita", "Giudizio"];
+    const rows = filtered.map(v => [v.codice_fiscale, v.data_visita, v.tipo_visita, v.giudizio]);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Allegato_3B_${new Date().getFullYear()}.csv`;
+    link.click();
+
+    await runCommand("INSERT INTO audit_logs (action, details) VALUES (?, ?)",
+      ["EXPORT", "Allegato 3B esportato"]);
+  };
+
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <CalendarIcon className="text-blue-600" /> Scadenziario Visite
         </h1>
-        <div className="flex bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+        <div className="flex gap-4">
           <button
-            onClick={() => setFilter('all')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={export3B}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm text-sm"
           >
-            Tutte
+            <FileSpreadsheet size={18} /> Esporta Allegato 3B
           </button>
-          <button
-            onClick={() => setFilter('upcoming')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'upcoming' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            In Scadenza (30gg)
-          </button>
-          <button
-            onClick={() => setFilter('expired')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'expired' ? 'bg-red-50 text-red-600' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Scadute
-          </button>
+          <div className="flex bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Tutte
+            </button>
+            <button
+              onClick={() => setFilter('upcoming')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'upcoming' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              In Scadenza (30gg)
+            </button>
+            <button
+              onClick={() => setFilter('expired')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${filter === 'expired' ? 'bg-red-50 text-red-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Scadute
+            </button>
+          </div>
         </div>
       </div>
 

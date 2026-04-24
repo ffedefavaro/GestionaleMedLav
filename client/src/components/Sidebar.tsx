@@ -7,7 +7,9 @@ import {
   Settings,
   ClipboardList,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert,
+  AlertOctagon
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
@@ -35,6 +37,8 @@ const Sidebar = () => {
     { icon: Stethoscope, label: 'Nuova Visita', to: '/nuova-visita' },
     { icon: Calendar, label: 'Scadenziario', to: '/scadenziario' },
     { icon: ClipboardList, label: 'Protocolli', to: '/protocolli' },
+    { icon: ShieldAlert, label: 'Sicurezza/RSPP', to: '/sicurezza' },
+    { icon: AlertOctagon, label: 'Registro Esposti', to: '/registro-esposti' },
     { icon: Settings, label: 'Impostazioni', to: '/settings' },
   ];
 

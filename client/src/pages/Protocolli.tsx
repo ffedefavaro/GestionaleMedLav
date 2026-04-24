@@ -10,7 +10,8 @@ const Protocolli = () => {
     company_id: '',
     mansione: '',
     esami: '',
-    periodicita_mesi: 12
+    periodicita_mesi: 12,
+    rischi_associati: [] as string[]
   });
 
   const fetchData = () => {
@@ -34,8 +35,13 @@ const Protocolli = () => {
       "INSERT INTO protocols (company_id, mansione, esami, periodicita_mesi) VALUES (?, ?, ?, ?)",
       [formData.company_id, formData.mansione, formData.esami, formData.periodicita_mesi]
     );
+
+    // Log for audit
+    await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+      ["INSERT", "protocols", `Nuovo protocollo per mansione: ${formData.mansione}`]);
+
     setShowForm(false);
-    setFormData({ company_id: '', mansione: '', esami: '', periodicita_mesi: 12 });
+    setFormData({ company_id: '', mansione: '', esami: '', periodicita_mesi: 12, rischi_associati: [] });
     fetchData();
   };
 
