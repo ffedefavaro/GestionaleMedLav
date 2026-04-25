@@ -5,29 +5,58 @@ let db: Database | null = null;
 
 export const initDB = async () => {
   if (db) return db;
-  const SQL = await initSqlJs({
-    locateFile: file => {
-      if (file.endsWith('.wasm')) {
-        // Handle both local dev and production paths
-        return import.meta.env.PROD ? `./sql-wasm.wasm` : `/sql-wasm.wasm`;
+
+  try {
+    console.log("Inizializzazione SQL.js...");
+    const SQL = await initSqlJs({
+      locateFile: file => {
+        if (file.endsWith('.wasm')) {
+          const wasmPath = import.meta.env.PROD ? `./sql-wasm.wasm` : `/sql-wasm.wasm`;
+          console.log(`Caricamento WASM da: ${wasmPath}`);
+          return wasmPath;
+        }
+        return `/${file}`;
       }
-      return `/${file}`;
+    });
+
+    console.log("Recupero dati da IndexedDB...");
+    let savedData;
+    try {
+      savedData = await get('cartsan_db_v2');
+    } catch (e) {
+      console.error("Errore nel recupero da IndexedDB:", e);
     }
-  });
 
-  const savedData = await get('cartsan_db_v2');
-  if (savedData) {
-    db = new SQL.Database(savedData);
-  } else {
-    db = new SQL.Database();
-    createTables(db);
+    if (savedData) {
+      console.log("Database esistente trovato.");
+      try {
+        db = new SQL.Database(savedData);
+      } catch (e) {
+        console.error("Errore nel caricamento del database salvato. Creazione nuovo database...", e);
+        db = new SQL.Database();
+        createTables(db);
+      }
+    } else {
+      console.log("Nessun database trovato. Creazione nuovo...");
+      db = new SQL.Database();
+      createTables(db);
+    }
+
+    if (db) {
+      console.log("Esecuzione migrazioni...");
+      runMigrations(db);
+      console.log("Salvataggio database...");
+      await saveDB();
+      console.log("Inizializzazione completata.");
+    } else {
+      throw new Error("Impossibile creare l'istanza del database.");
+    }
+
+    return db;
+  } catch (error) {
+    console.error("ERRORE CRITICO INIT DB:", error);
+    throw error;
   }
-
-  // Always run migrations on existing DB too
-  runMigrations(db);
-  await saveDB();
-
-  return db;
 };
 
 const createTables = (database: Database) => {
