@@ -172,6 +172,24 @@ const createTables = (database: Database) => {
       nome TEXT UNIQUE,
       categoria TEXT -- fisico, chimico, biologico, etc.
     );
+
+    CREATE TABLE IF NOT EXISTS training_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER,
+      corso TEXT NOT NULL,
+      data_completamento DATE,
+      scadenza DATE,
+      FOREIGN KEY (worker_id) REFERENCES workers(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ppe_assigned (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER,
+      dispositivo TEXT NOT NULL,
+      data_consegna DATE,
+      scadenza_sostituzione DATE,
+      FOREIGN KEY (worker_id) REFERENCES workers(id)
+    );
   `);
 
   // Initialize masters
@@ -216,7 +234,10 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE workers ADD COLUMN protocol_id INTEGER;",
     "ALTER TABLE workers ADD COLUMN is_protocol_customized INTEGER DEFAULT 0;",
     "ALTER TABLE workers ADD COLUMN custom_protocol TEXT;",
-    "ALTER TABLE workers ADD COLUMN protocol_override_reason TEXT;"
+    "ALTER TABLE workers ADD COLUMN protocol_override_reason TEXT;",
+    "ALTER TABLE visits ADD COLUMN accertamenti_effettuati TEXT;",
+    "CREATE TABLE IF NOT EXISTS training_records (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, corso TEXT NOT NULL, data_completamento DATE, scadenza DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));",
+    "CREATE TABLE IF NOT EXISTS ppe_assigned (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, dispositivo TEXT NOT NULL, data_consegna DATE, scadenza_sostituzione DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));"
   ];
 
   migrations.forEach(m => {

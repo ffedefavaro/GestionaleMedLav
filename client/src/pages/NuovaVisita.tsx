@@ -128,12 +128,12 @@ const NuovaVisita = () => {
   const handleSave = async () => {
     // 1. Insert Visit
     await runCommand(`
-      INSERT INTO visits (worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica, esame_obiettivo, giudizio, prescrizioni, scadenza_prossima, finalized)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO visits (worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica, esame_obiettivo, accertamenti_effettuati, giudizio, prescrizioni, scadenza_prossima, finalized)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `, [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
       visitForm.anamnesi_lavorativa, visitForm.anamnesi_familiare, visitForm.anamnesi_patologica,
-      visitForm.esame_obiettivo, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
+      visitForm.esame_obiettivo, visitForm.accertamenti_effettuati, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
     ]);
 
     const lastVisitData = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
@@ -530,12 +530,23 @@ const NuovaVisita = () => {
 
             <div className="flex justify-between items-center mt-10 pt-8 border-t border-gray-50">
               <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Indietro</button>
-              <button
-                onClick={handleSave}
-                className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl"
-              >
-                <Download size={22} strokeWidth={3} /> Finalizza e Stampa PDF
-              </button>
+              <div className="flex gap-4">
+                <a
+                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Visita+periodica+programmata+per+${workerData.cognome}+${workerData.nome}+(${workerData.azienda})&sf=true&output=xml`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-teal px-6 py-5 flex items-center gap-3"
+                  title="Pianifica prossima visita su Google Calendar"
+                >
+                  <RefreshCw size={22} />
+                </a>
+                <button
+                  onClick={handleSave}
+                  className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl"
+                >
+                  <Download size={22} strokeWidth={3} /> Finalizza e Stampa PDF
+                </button>
+              </div>
             </div>
           </div>
         )}
