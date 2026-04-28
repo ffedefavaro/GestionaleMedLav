@@ -252,7 +252,9 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;",
-    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;"
+    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;",
+    "ALTER TABLE visits ADD COLUMN structured_anamnesis TEXT;",
+    "ALTER TABLE workers ADD COLUMN permanent_anamnesis TEXT;"
   ];
 
   migrations.forEach(m => {
