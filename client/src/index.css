@@ -1,3 +1,53 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-warmWhite text-anthracite selection:bg-accent/20;
+  }
+}
+
+@layer components {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-primary/5;
+  }
+
+  .btn-teal {
+    @apply bg-tealAction text-white px-6 py-3 rounded-[8px] font-black uppercase tracking-tighter hover:bg-tealAction/90 active:scale-95 transition-all shadow-xl shadow-tealAction/20;
+  }
+
+  .btn-accent {
+    @apply bg-accent text-white px-6 py-3 rounded-[8px] font-black uppercase tracking-tighter hover:bg-accent/90 active:scale-95 transition-all shadow-xl shadow-accent/20;
+  }
+
+  .input-standard {
+    @apply bg-white/80 border border-gray-100 rounded-2xl p-4 text-sm font-bold text-primary focus:ring-4 focus:ring-primary/5 focus:border-primary outline-none transition-all placeholder:text-gray-300 shadow-sm;
+  }
+
+  .table-medical {
+    @apply w-full text-left border-separate border-spacing-y-3;
+  }
+  .table-medical th {
+    @apply px-8 py-4 text-[10px] uppercase font-black text-gray-400 tracking-widest;
+  }
+  .table-medical td {
+    @apply px-8 py-5 bg-white border-y border-gray-50 first:border-l first:rounded-l-[24px] last:border-r last:rounded-r-[24px] text-sm font-bold text-primary transition-all shadow-sm;
+  }
+  .table-medical tr:nth-child(even) td {
+    @apply bg-warmWhite/40;
+  }
+  .table-medical tr:hover td {
+    @apply bg-primary/5 border-primary/5 shadow-none;
+  }
+}

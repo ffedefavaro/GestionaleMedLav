@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { GraduationCap, ShieldAlert, Plus, CheckCircle } from 'lucide-react';
+import { GraduationCap, Plus, User, Package } from 'lucide-react';
 
 const Sicurezza = () => {
   const [workers, setWorkers] = useState<any[]>([]);
@@ -20,11 +20,13 @@ const Sicurezza = () => {
       SELECT training_records.*, workers.nome, workers.cognome
       FROM training_records
       JOIN workers ON training_records.worker_id = workers.id
+      ORDER BY training_records.scadenza ASC
     `));
     setPpe(executeQuery(`
       SELECT ppe_assigned.*, workers.nome, workers.cognome
       FROM ppe_assigned
       JOIN workers ON ppe_assigned.worker_id = workers.id
+      ORDER BY ppe_assigned.scadenza_sostituzione ASC
     `));
   };
 
@@ -39,6 +41,7 @@ const Sicurezza = () => {
       [selectedWorker, tForm.corso, tForm.data, tForm.scadenza]
     );
     setShowTrainingForm(false);
+    setTForm({ corso: '', data: '', scadenza: '' });
     fetchData();
   };
 
@@ -49,103 +52,166 @@ const Sicurezza = () => {
       [selectedWorker, pForm.dispositivo, pForm.data, pForm.scadenza]
     );
     setShowPpeForm(false);
+    setPForm({ dispositivo: '', data: '', scadenza: '' });
     fetchData();
   };
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-8 flex items-center gap-2">
-        <ShieldAlert className="text-red-600" /> Gestione Sicurezza (RSPP)
-      </h1>
-
-      <div className="mb-8 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <label className="block text-sm font-bold text-gray-700 mb-2">Seleziona Lavoratore</label>
-        <select
-          className="w-full md:w-1/3 border border-gray-300 rounded-lg p-2"
-          value={selectedWorker}
-          onChange={e => setSelectedWorker(e.target.value)}
-        >
-          <option value="">-- Seleziona --</option>
-          {workers.map(w => <option key={w.id} value={w.id}>{w.cognome} {w.nome}</option>)}
-        </select>
+    <div className="p-10 max-w-7xl mx-auto">
+      <div className="mb-10">
+        <h1 className="text-4xl font-black text-primary tracking-tight">Gestione Sicurezza (RSPP)</h1>
+        <p className="text-gray-500 font-medium mt-1">Monitoraggio formazione obbligatoria e DPI</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="mb-10 glass-card p-8 rounded-[40px] flex flex-col md:flex-row items-center gap-6">
+        <div className="bg-primary/5 p-4 rounded-2xl text-primary">
+          <User size={32} />
+        </div>
+        <div className="flex-1 w-full">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block mb-2">Lavoratore di Riferimento</label>
+          <select
+            className="w-full input-standard font-black text-primary text-lg"
+            value={selectedWorker}
+            onChange={e => setSelectedWorker(e.target.value)}
+          >
+            <option value="">-- Seleziona dalla lista --</option>
+            {workers.map(w => <option key={w.id} value={w.id}>{w.cognome} {w.nome}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Training Section */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold flex items-center gap-2"><GraduationCap size={20} /> Formazione</h2>
-            <button onClick={() => setShowTrainingForm(true)} className="bg-blue-600 text-white p-2 rounded-lg"><Plus size={16} /></button>
+        <div className="space-y-8">
+          <div className="flex justify-between items-center px-4">
+            <h2 className="text-2xl font-black text-primary flex items-center gap-3">
+              <div className="p-2 bg-tealAction/10 rounded-xl text-tealAction"><GraduationCap size={24} /></div>
+              Formazione
+            </h2>
+            <button
+              onClick={() => setShowTrainingForm(!showTrainingForm)}
+              className="btn-teal !p-3 !rounded-2xl shadow-tealAction/10"
+              disabled={!selectedWorker}
+            >
+              <Plus size={20} strokeWidth={3} />
+            </button>
           </div>
 
           {showTrainingForm && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3 text-sm">
-              <input placeholder="Nome Corso (es. Formazione Generale)" className="w-full border p-2 rounded" value={tForm.corso} onChange={e => setTForm({...tForm, corso: e.target.value})} />
-              <div className="grid grid-cols-2 gap-2">
-                <input type="date" className="border p-2 rounded" value={tForm.data} onChange={e => setTForm({...tForm, data: e.target.value})} />
-                <input type="date" className="border p-2 rounded" value={tForm.scadenza} onChange={e => setTForm({...tForm, scadenza: e.target.value})} />
+            <div className="bg-white/80 backdrop-blur-sm p-8 rounded-[32px] border border-gray-100 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-300">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tipologia Corso</label>
+                <input placeholder="es. Antincendio Rischio Medio" className="input-standard w-full" value={tForm.corso} onChange={e => setTForm({...tForm, corso: e.target.value})} />
               </div>
-              <button onClick={addTraining} className="w-full bg-blue-600 text-white p-2 rounded font-bold">Salva Corso</button>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Conseguimento</label>
+                  <input type="date" className="input-standard" value={tForm.data} onChange={e => setTForm({...tForm, data: e.target.value})} />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Scadenza</label>
+                  <input type="date" className="input-standard text-tealAction" value={tForm.scadenza} onChange={e => setTForm({...tForm, scadenza: e.target.value})} />
+                </div>
+              </div>
+              <button onClick={addTraining} className="btn-teal w-full py-5 text-base shadow-2xl">Registra Certificato</button>
             </div>
           )}
 
-          <div className="bg-white border rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50">
+          <div className="glass-card rounded-[40px] overflow-hidden p-2">
+            <table className="table-medical">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Lavoratore</th>
-                  <th className="px-4 py-2">Corso</th>
-                  <th className="px-4 py-2">Scadenza</th>
+                  <th>Lavoratore</th>
+                  <th>Corso / Abilitazione</th>
+                  <th className="text-right">Scadenza</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {training.map(t => (
-                  <tr key={t.id}>
-                    <td className="px-4 py-2">{t.cognome}</td>
-                    <td className="px-4 py-2 font-medium">{t.corso}</td>
-                    <td className="px-4 py-2">{t.scadenza}</td>
+                  <tr key={t.id} className="group">
+                    <td className="font-black text-primary">{t.cognome}</td>
+                    <td>
+                      <div className="text-gray-600 font-bold text-sm">{t.corso}</div>
+                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Conseguito: {t.data}</div>
+                    </td>
+                    <td className="text-right">
+                       <span className="bg-tealAction/5 text-tealAction px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-tealAction/10">
+                        {t.scadenza}
+                       </span>
+                    </td>
                   </tr>
                 ))}
+                {training.length === 0 && (
+                  <tr><td colSpan={3} className="text-center py-10 text-gray-300 italic">Nessun record di formazione</td></tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
         {/* PPE Section */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold flex items-center gap-2"><CheckCircle size={20} /> DPI Assegnati</h2>
-            <button onClick={() => setShowPpeForm(true)} className="bg-green-600 text-white p-2 rounded-lg"><Plus size={16} /></button>
+        <div className="space-y-8">
+          <div className="flex justify-between items-center px-4">
+            <h2 className="text-2xl font-black text-primary flex items-center gap-3">
+              <div className="p-2 bg-accent/10 rounded-xl text-accent"><Package size={24} /></div>
+              DPI Assegnati
+            </h2>
+            <button
+              onClick={() => setShowPpeForm(!showPpeForm)}
+              className="btn-accent !p-3 !rounded-2xl shadow-accent/10"
+              disabled={!selectedWorker}
+            >
+              <Plus size={20} strokeWidth={3} />
+            </button>
           </div>
 
           {showPpeForm && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3 text-sm">
-              <input placeholder="Dispositivo (es. Scarpe Antinfortunistiche)" className="w-full border p-2 rounded" value={pForm.dispositivo} onChange={e => setPForm({...pForm, dispositivo: e.target.value})} />
-              <div className="grid grid-cols-2 gap-2">
-                <input type="date" className="border p-2 rounded" value={pForm.data} onChange={e => setPForm({...pForm, data: e.target.value})} />
-                <input type="date" className="border p-2 rounded" value={pForm.scadenza} onChange={e => setPForm({...pForm, scadenza: e.target.value})} />
+            <div className="bg-white/80 backdrop-blur-sm p-8 rounded-[32px] border border-gray-100 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-300">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Dispositivo di Protezione</label>
+                <input placeholder="es. Guanti Dielettrici Classe 0" className="input-standard w-full" value={pForm.dispositivo} onChange={e => setPForm({...pForm, dispositivo: e.target.value})} />
               </div>
-              <button onClick={addPpe} className="w-full bg-green-600 text-white p-2 rounded font-bold">Salva Consegna</button>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Consegna</label>
+                  <input type="date" className="input-standard" value={pForm.data} onChange={e => setPForm({...pForm, data: e.target.value})} />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Revisione / Sostituzione</label>
+                  <input type="date" className="input-standard text-accent" value={pForm.scadenza} onChange={e => setPForm({...pForm, scadenza: e.target.value})} />
+                </div>
+              </div>
+              <button onClick={addPpe} className="btn-accent w-full py-5 text-base shadow-2xl">Registra Consegna DPI</button>
             </div>
           )}
 
-          <div className="bg-white border rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50">
+          <div className="glass-card rounded-[40px] overflow-hidden p-2">
+            <table className="table-medical">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Lavoratore</th>
-                  <th className="px-4 py-2">DPI</th>
-                  <th className="px-4 py-2">Prossima Sost.</th>
+                  <th>Lavoratore</th>
+                  <th>Dispositivo (DPI)</th>
+                  <th className="text-right">Revisione</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {ppe.map(p => (
                   <tr key={p.id}>
-                    <td className="px-4 py-2">{p.cognome}</td>
-                    <td className="px-4 py-2 font-medium">{p.dispositivo}</td>
-                    <td className="px-4 py-2">{p.scadenza_sostituzione}</td>
+                    <td className="font-black text-primary">{p.cognome}</td>
+                    <td>
+                      <div className="text-gray-600 font-bold text-sm">{p.dispositivo}</div>
+                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Consegnato: {p.data}</div>
+                    </td>
+                    <td className="text-right">
+                       <span className="bg-accent/5 text-accent px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-accent/10">
+                        {p.scadenza_sostituzione}
+                       </span>
+                    </td>
                   </tr>
                 ))}
+                {ppe.length === 0 && (
+                   <tr><td colSpan={3} className="text-center py-10 text-gray-300 italic">Nessun DPI consegnato</td></tr>
+                )}
               </tbody>
             </table>
           </div>
