@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand, getDB } from '../lib/db';
 import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Key } from 'lucide-react';
+import { set, del } from 'idb-keyval';
 
 const Settings = () => {
   const [doctor, setDoctor] = useState({
@@ -66,17 +67,17 @@ const Settings = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function() {
+    reader.onload = async function() {
       const uint8Array = new Uint8Array(this.result as ArrayBuffer);
-      localStorage.setItem('cartsan_db', JSON.stringify(Array.from(uint8Array)));
+      await set('cartsan_db_v2', uint8Array);
       window.location.reload();
     };
     reader.readAsArrayBuffer(file);
   };
 
-  const clearDB = () => {
-    if (confirm("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente. Procedere?")) {
-      localStorage.removeItem('cartsan_db');
+  const clearDB = async () => {
+    if (confirm("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Procedere?")) {
+      await del('cartsan_db_v2');
       window.location.reload();
     }
   };
