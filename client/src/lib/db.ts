@@ -1,5 +1,5 @@
 import initSqlJs, { type Database } from 'sql.js';
-import { get, set } from 'idb-keyval';
+import { loadEncryptedDB, saveEncryptedDB } from './auth';
 
 let db: Database | null = null;
 
@@ -19,20 +19,20 @@ export const initDB = async () => {
       }
     });
 
-    console.log("Recupero dati da IndexedDB...");
+    console.log("Recupero dati cifrati da IndexedDB...");
     let savedData;
     try {
-      savedData = await get('cartsan_db_v2');
+      savedData = await loadEncryptedDB();
     } catch (e) {
-      console.error("Errore nel recupero da IndexedDB:", e);
+      console.error("Errore nel recupero/decifrazione da IndexedDB:", e);
     }
 
     if (savedData) {
-      console.log("Database esistente trovato.");
+      console.log("Database cifrato trovato e decifrato.");
       try {
         db = new SQL.Database(savedData);
       } catch (e) {
-        console.error("Errore nel caricamento del database salvato. Creazione nuovo database...", e);
+        console.error("Errore nel caricamento del database decifrato. Creazione nuovo database...", e);
         db = new SQL.Database();
         createTables(db);
       }
@@ -269,7 +269,7 @@ const runMigrations = (database: Database) => {
 export const saveDB = async () => {
   if (!db) return;
   const data = db.export();
-  await set('cartsan_db_v2', data);
+  await saveEncryptedDB(data);
 };
 
 export const getDB = () => db;

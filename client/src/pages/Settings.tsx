@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand, getDB } from '../lib/db';
+import { executeQuery, runCommand } from '../lib/db';
 import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
 
@@ -58,15 +58,18 @@ const Settings = () => {
     alert("Profilo Medico salvato!");
   };
 
-  const handleExportDB = () => {
-    const db = getDB();
-    if (!db) return;
-    const data = db.export();
-    const blob = new Blob([new Uint8Array(data)], { type: 'application/x-sqlite3' });
+  const handleExportDB = async () => {
+    const { get } = await import('idb-keyval');
+    const encrypted = await get('cartsan_db_encrypted');
+    if (!encrypted) {
+      alert("Nessun database cifrato trovato per l'esportazione.");
+      return;
+    }
+    const blob = new Blob([encrypted], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cartsan_backup_${new Date().toISOString().split('T')[0]}.sqlite`;
+    a.download = `cartsan_backup_encrypted_${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
   };
 
@@ -76,11 +79,13 @@ const Settings = () => {
 
     const reader = new FileReader();
     reader.onload = async function() {
-      const uint8Array = new Uint8Array(this.result as ArrayBuffer);
-      await set('cartsan_db_v2', uint8Array);
+      const encryptedData = this.result as string;
+      const { set } = await import('idb-keyval');
+      await set('cartsan_db_encrypted', encryptedData);
+      alert("Database importato con successo. L'app verrà riavviata.");
       window.location.reload();
     };
-    reader.readAsArrayBuffer(file);
+    reader.readAsText(file);
   };
 
   const clearDB = async () => {
@@ -248,9 +253,9 @@ const Settings = () => {
                 </button>
 
                 <label className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-5 rounded-2xl border border-white/10 transition-all group cursor-pointer">
-                  <span className="font-bold text-sm">Importa Database</span>
+                  <span className="font-bold text-sm">Importa Backup (.txt)</span>
                   <Upload size={18} className="text-tealAction group-hover:scale-110 transition-transform" />
-                  <input type="file" className="hidden" accept=".sqlite" onChange={handleImportDB} />
+                  <input type="file" className="hidden" accept=".txt" onChange={handleImportDB} />
                 </label>
               </div>
 

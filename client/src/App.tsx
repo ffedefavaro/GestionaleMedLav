@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
-import { initDB } from './lib/db';
+import { initDB, runCommand } from './lib/db';
 import { del } from 'idb-keyval';
+import { checkSession, updateLastActivity } from './lib/auth';
 
 // Pages
+import Login from './pages/Login';
 import Aziende from './pages/Aziende';
 import Lavoratori from './pages/Lavoratori';
 import Protocolli from './pages/Protocolli';
@@ -18,46 +20,73 @@ import Dashboard from './pages/Dashboard';
 function App() {
   const [dbReady, setDbReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('isLoggedIn') === 'true');
 
   useEffect(() => {
-    let isMounted = true;
+    if (!isLoggedIn) return;
 
-    // Timeout di fallback di 5 secondi
+    let isMounted = true;
     const timeoutId = setTimeout(() => {
       if (isMounted && !dbReady && !error) {
-        setError("Il caricamento sta impiegando più tempo del previsto. Verifica la connessione o prova a ricaricare.");
+        setError("Il caricamento del database cifrato sta impiegando troppo tempo. Verifica la password.");
       }
     }, 5000);
 
     initDB()
-      .then(() => {
+      .then(async () => {
         if (isMounted) {
           setDbReady(true);
           clearTimeout(timeoutId);
+          // Log access
+          await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+            ["LOGIN", "system", `Accesso utente da ${navigator.userAgent}`]);
         }
       })
       .catch((err) => {
         if (isMounted) {
           console.error("App initialization error:", err);
-          setError(`Errore critico nell'inizializzazione del database: ${err.message || "Errore sconosciuto"}`);
+          setError(`Errore critico nella decifrazione o inizializzazione: ${err.message}`);
           clearTimeout(timeoutId);
         }
       });
 
+    const sessionInterval = setInterval(() => {
+      if (!checkSession()) {
+        setIsLoggedIn(false);
+        setDbReady(false);
+      }
+    }, 30000); // Check every 30s
+
+    const activityHandler = () => updateLastActivity();
+    window.addEventListener('mousemove', activityHandler);
+    window.addEventListener('keydown', activityHandler);
+
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
+      clearInterval(sessionInterval);
+      window.removeEventListener('mousemove', activityHandler);
+      window.removeEventListener('keydown', activityHandler);
     };
-  }, []);
+  }, [isLoggedIn]);
 
   const handleReset = () => {
-    if (confirm("Sei sicuro? Questo cancellerà tutti i dati locali e ripristinerà il database vuoto.")) {
+    if (confirm("Sei sicuro? Questo cancellerà tutti i dati locali e il database cifrato.")) {
       localStorage.clear();
-      del('cartsan_db_v2').then(() => {
+      Promise.all([
+        del('cartsan_db_v2'),
+        del('cartsan_db_encrypted'),
+        del('user_password_hash')
+      ]).then(() => {
         window.location.reload();
       });
     }
   };
+
+
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   if (error) {
     return (
