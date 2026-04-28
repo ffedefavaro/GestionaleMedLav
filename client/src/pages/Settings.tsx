@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, ShieldCheck } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
 
 const Settings = () => {
@@ -269,6 +269,16 @@ const Settings = () => {
               </div>
 
               <div className="mt-12 flex flex-col gap-4">
+                <a
+                  href="https://github.com/your-repo/docs/PRIVACY_POLICY.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-4 bg-white/5 hover:bg-white/10 rounded-2xl flex items-center gap-3 transition-colors group"
+                >
+                  <ShieldCheck size={18} className="text-accent group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">Informativa Privacy Completa</span>
+                </a>
+
                 <div className="p-4 bg-white/5 rounded-2xl flex items-center gap-3">
                   <BadgeCheck size={18} className="text-tealAction" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Persistent Storage OK</span>

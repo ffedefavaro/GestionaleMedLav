@@ -136,16 +136,37 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
                <h2 className="text-2xl font-black text-primary mb-6 flex items-center gap-3">
                   <Shield size={28} className="text-accent" /> Informativa Privacy & GDPR
                </h2>
-               <div className="max-h-96 overflow-y-auto pr-4 custom-scrollbar text-gray-600 text-sm space-y-4 font-medium leading-relaxed">
-                  <p>In conformità al <strong>Regolamento UE 2016/679 (GDPR)</strong> e al <strong>D.Lgs. 196/2003</strong>, la informiamo che:</p>
-                  <ul className="list-disc ml-6 space-y-2">
-                    <li>I dati sanitari trattati in questa applicazione risiedono <strong>esclusivamente sul dispositivo locale</strong> dell'utente.</li>
-                    <li>Nessun dato viene trasmesso a server esterni o terze parti senza esplicito comando (es. invio email).</li>
-                    <li>L'applicazione utilizza una <strong>cifratura AES-256</strong> basata sulla password master da lei scelta.</li>
-                    <li>In caso di smarrimento della password, i dati <strong>non saranno in alcun modo recuperabili</strong>, nemmeno dal produttore del software.</li>
-                    <li>È responsabilità del Medico Competente garantire la custodia del dispositivo e della password in conformità alle misure minime di sicurezza.</li>
-                  </ul>
-                  <p className="pt-4 border-t border-gray-100">Proseguendo, lei accetta i termini di utilizzo e dichiara di aver compreso le modalità di trattamento dei dati sensibili.</p>
+               <div className="max-h-96 overflow-y-auto pr-4 custom-scrollbar text-gray-600 text-sm space-y-6 font-medium leading-relaxed">
+                  <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10">
+                     <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 text-center">Base Giuridica: Art. 9 GDPR</p>
+                     <p className="text-[11px] text-center italic">Trattamento necessario per finalità di medicina del lavoro e sorveglianza sanitaria obbligatoria.</p>
+                  </div>
+
+                  <section>
+                    <h3 className="font-black text-primary uppercase text-xs mb-2">Titolare del Trattamento</h3>
+                    <p>Il Titolare è l'utente finale (Medico/Organizzazione). Il software agisce come strumento **offline-first**: i dati risiedono **esclusivamente nella memoria locale (IndexedDB)** del browser.</p>
+                  </section>
+
+                  <section>
+                    <h3 className="font-black text-primary uppercase text-xs mb-2">Misure di Sicurezza (Art. 32 GDPR)</h3>
+                    <ul className="list-disc ml-6 space-y-2">
+                      <li>**Cifratura AES-256**: Dati sanitari crittografati localmente con chiave derivata dalla Master Password.</li>
+                      <li>**Zero Cloud Storage**: Nessuna trasmissione automatica a database esterni o cloud di terze parti.</li>
+                      <li>**Accesso Protetto**: Obbligo di autenticazione e timeout automatico della sessione.</li>
+                    </ul>
+                  </section>
+
+                  <section>
+                    <h3 className="font-black text-primary uppercase text-xs mb-2">Diritti dell'Interessato</h3>
+                    <p>I lavoratori possono esercitare i diritti previsti dagli Artt. 15-22 GDPR (accesso, rettifica, cancellazione) rivolgendosi al Medico Competente.</p>
+                  </section>
+
+                  <div className="bg-red-50 p-4 rounded-2xl border border-red-100">
+                    <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Avvertenza Importante</p>
+                    <p className="text-[11px] text-red-800">In caso di smarrimento della password, i dati **non saranno recuperabili**. Il Titolare è responsabile del backup fisico dei dati cifrati.</p>
+                  </div>
+
+                  <p className="pt-4 border-t border-gray-100 text-[11px]">Confermando, si dichiara di aver compreso l'informativa ai sensi del **D.Lgs. 196/2003** e del **Regolamento UE 2016/679**.</p>
                </div>
                <div className="mt-10 flex items-center justify-between gap-6">
                   <label className="flex items-center gap-3 cursor-pointer group">
