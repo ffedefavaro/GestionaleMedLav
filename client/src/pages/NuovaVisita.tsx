@@ -14,11 +14,13 @@ import WorkerSearch from '../components/WorkerSearch';
 const NuovaVisita = () => {
   const [lavoratori, setLavoratori] = useState<any[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
+  const [hasGoogleId, setHasGoogleId] = useState(false);
   const [workerData, setWorkerData] = useState<any>(null);
   const [step, setStep] = useState(1);
   const [risksMaster, setRisksMaster] = useState<any[]>([]);
 
   // Gmail State
+  const [loadingGmail, setLoadingGmail] = useState(false);
 
   const [visitForm, setVisitForm] = useState({
     data_visita: new Date().toISOString().split('T')[0],
@@ -76,6 +78,7 @@ const NuovaVisita = () => {
   useEffect(() => {
     fetchWorkers();
     setRisksMaster(executeQuery("SELECT nome FROM risks_master ORDER BY nome"));
+    get('google_client_id').then(id => setHasGoogleId(!!id));
   }, []);
 
   const fetchWorkers = () => {
@@ -329,36 +332,87 @@ const NuovaVisita = () => {
 
   const handleAuthAndImport = async () => {
     const clientId = await get('google_client_id');
-    if (!clientId) { alert("Configura Google Client ID nelle impostazioni."); return; }
+    if (!clientId) {
+      alert("Configura il Google Client ID nelle impostazioni prima di usare Gmail.");
+      return;
+    }
+
+    if (!workerData?.email) {
+      alert("Il lavoratore non ha un indirizzo email configurato. Impossibile filtrare i messaggi.");
+      return;
+    }
+
+    setLoadingGmail(true);
+
+    // Timeout of 10 seconds
+    const timeoutId = setTimeout(() => {
+      if (loadingGmail) {
+        setLoadingGmail(false);
+        alert("La sincronizzazione Gmail ha impiegato troppo tempo. Verifica la connessione o le credenziali OAuth.");
+      }
+    }, 10000);
+
     try {
+      if (!(window as any).google?.accounts?.oauth2) {
+        throw new Error("Google API non caricata correttamente.");
+      }
+
       const client = (window as any).google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
         callback: async (response: any) => {
-          if (response.access_token) {
-            const msgs = await fetchGmailMessages(response.access_token, workerData.email);
-            if (msgs.length > 0) {
-              const latest = msgs[0];
-              let textToImport = `--- EMAIL del ${latest.date} ---\n${latest.body}\n`;
-              const attachments = await fetchGmailAttachments(response.access_token, latest.id);
-              attachments.forEach(att => { if (att.extractedText) textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`; });
+          clearTimeout(timeoutId);
+          if (response.error) {
+            console.error("OAuth Error:", response.error);
+            setLoadingGmail(false);
+            alert(`Errore OAuth: ${response.error_description || response.error}`);
+            return;
+          }
 
-              setAnamnesis(prev => ({
-                ...prev,
-                patologica_generale: {
-                  ...prev.patologica_generale,
-                  altro: { status: 'si', note: prev.patologica_generale.altro.note + "\n" + textToImport }
+          if (response.access_token) {
+            try {
+              console.log(`Ricerca mail per: ${workerData.email}`);
+              const msgs = await fetchGmailMessages(response.access_token, workerData.email);
+
+              if (msgs.length > 0) {
+                const latest = msgs[0];
+                let textToImport = `--- EMAIL del ${latest.date} ---\n${latest.body}\n`;
+
+                try {
+                  const attachments = await fetchGmailAttachments(response.access_token, latest.id);
+                  attachments.forEach(att => {
+                    if (att.extractedText) textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`;
+                  });
+                } catch (attErr) {
+                  console.warn("Errore durante il recupero allegati:", attErr);
                 }
-              }));
-              alert("Dati importati dall'ultima email!");
-            } else {
-              alert("Nessuna email trovata per questo lavoratore.");
+
+                setAnamnesis(prev => ({
+                  ...prev,
+                  patologica_generale: {
+                    ...prev.patologica_generale,
+                    altro: { status: 'si', note: (prev.patologica_generale.altro.note || "") + "\n" + textToImport }
+                  }
+                }));
+                alert("Dati importati con successo dall'ultima email!");
+              } else {
+                alert(`Nessuna comunicazione trovata da: ${workerData.email}`);
+              }
+            } catch (fetchErr: any) {
+              console.error("Gmail Fetch Error:", fetchErr);
+              alert(`Errore durante il recupero delle mail: ${fetchErr.message}`);
             }
           }
+          setLoadingGmail(false);
         },
       });
       client.requestAccessToken();
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      console.error("Gmail Integration Error:", e);
+      setLoadingGmail(false);
+      alert(`Errore Integrazione Gmail: ${e.message}`);
+    }
   };
 
   const exposures = calculateExposure();
@@ -563,9 +617,26 @@ const NuovaVisita = () => {
                   <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
                     <Stethoscope size={18} className="text-primary" /> 4. Anamnesi Patologica Generale
                   </h3>
-                  <button onClick={handleAuthAndImport} className="btn-accent !py-2 !px-4 text-[10px] flex items-center gap-2">
-                    <Mail size={14} /> Importa Ultima Mail
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={handleAuthAndImport}
+                    disabled={loadingGmail}
+                    className="btn-accent !py-2 !px-4 text-[10px] flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {loadingGmail ? <RefreshCw size={14} className="animate-spin" /> : <Mail size={14} />}
+                    {loadingGmail ? 'Sincronizzazione...' : 'Importa Ultima Mail'}
                   </button>
+                  {!hasGoogleId && (
+                    <span className="text-[8px] font-black text-accent uppercase tracking-tighter bg-accent/5 px-2 py-1 rounded border border-accent/10 animate-pulse">
+                      Configura Google ID nelle Impostazioni
+                    </span>
+                  )}
+                  {hasGoogleId && !workerData?.email && (
+                    <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter bg-gray-50 px-2 py-1 rounded border border-gray-100">
+                      Email lavoratore mancante
+                    </span>
+                  )}
+                </div>
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
