@@ -89,9 +89,18 @@ const Settings = () => {
   };
 
   const clearDB = async () => {
-    if (confirm("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Procedere?")) {
-      await del('cartsan_db_v2');
+    const confirmation = prompt("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Digita 'CANCELLA' per procedere:");
+    if (confirmation === 'CANCELLA') {
+      localStorage.clear();
+      await Promise.all([
+        del('cartsan_db_v2'),
+        del('cartsan_db_encrypted'),
+        del('user_password_hash'),
+        del('last_app_version')
+      ]);
       window.location.reload();
+    } else if (confirmation !== null) {
+      alert("Operazione annullata. La parola di conferma non è corretta.");
     }
   };
 
