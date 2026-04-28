@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Copy, Shield } from 'lucide-react';
+import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
+import { get } from 'idb-keyval';
+import WorkerSearch from '../components/WorkerSearch';
 
 const NuovaVisita = () => {
   const [lavoratori, setLavoratori] = useState<any[]>([]);
@@ -18,68 +20,83 @@ const NuovaVisita = () => {
 
   const [visitForm, setVisitForm] = useState({
     data_visita: new Date().toISOString().split('T')[0],
-    tipo_visita: 'preventiva',
+    tipo_visita: 'periodica',
     anamnesi_lavorativa: '',
     anamnesi_familiare: '',
     anamnesi_patologica: '',
-    esame_obiettivo: '',
     giudizio: 'idoneo',
     prescrizioni: '',
     accertamenti_effettuati: '',
     scadenza_prossima: '',
+    // Biometrics
     peso: 70,
     altezza: 170,
     p_sistolica: 120,
     p_diastolica: 80,
-    frequenza: 70
+    frequenza: 70,
+    spo2: 98,
+    // Structured Physical Exam
+    eo_cardiaca: '',
+    eo_respiratoria: '',
+    eo_cervicale: '',
+    eo_dorsolombare: '',
+    eo_spalle: '',
+    eo_arti_superiori: '',
+    eo_arti_inferiori: '',
+    eo_altro: ''
   });
 
   useEffect(() => {
+    fetchWorkers();
+  }, []);
+
+  const fetchWorkers = () => {
     const data = executeQuery(`
       SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, workers.codice_fiscale, companies.ragione_sociale as azienda
       FROM workers
       JOIN companies ON workers.company_id = companies.id
     `);
     setLavoratori(data);
-  }, []);
+  };
 
   useEffect(() => {
     if (selectedWorkerId) {
       const data = lavoratori.find(l => l.id.toString() === selectedWorkerId);
-      setWorkerData(data);
+      if (data) {
+        setWorkerData(data);
 
-      // Fetch full worker details with protocol info
-      const fullWorker = executeQuery(`
-        SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
-        FROM workers
-        LEFT JOIN protocols ON workers.protocol_id = protocols.id
-        WHERE workers.id = ?
-      `, [selectedWorkerId])[0];
+        const fullWorker = executeQuery(`
+          SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
+          FROM workers
+          LEFT JOIN protocols ON workers.protocol_id = protocols.id
+          WHERE workers.id = ?
+        `, [selectedWorkerId])[0];
 
-      if (fullWorker) {
-        let months = fullWorker.protocol_periodicity || 12;
-
-        // If customized, find the minimum periodicity among exams
-        if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
-          try {
-            const customExams = JSON.parse(fullWorker.custom_protocol);
-            if (customExams.length > 0) {
-              months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+        if (fullWorker) {
+          let months = fullWorker.protocol_periodicity || 12;
+          if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
+            try {
+              const customExams = JSON.parse(fullWorker.custom_protocol);
+              if (customExams.length > 0) {
+                months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+              }
+            } catch (e) {
+              console.error("Error parsing custom protocol", e);
             }
-          } catch (e) {
-            console.error("Error parsing custom protocol", e);
           }
-        }
 
-        const nextDate = new Date();
-        nextDate.setMonth(nextDate.getMonth() + months);
-        setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
+          const nextDate = new Date();
+          nextDate.setMonth(nextDate.getMonth() + months);
+          setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
+        }
       }
+    } else {
+      setWorkerData(null);
     }
   }, [selectedWorkerId, lavoratori]);
 
   const handleAuthAndFetch = async () => {
-    const clientId = localStorage.getItem('google_client_id');
+    const clientId = await get('google_client_id');
     if (!clientId) {
       alert("Configura il Client ID nelle impostazioni prima di usare Gmail.");
       return;
@@ -112,8 +129,8 @@ const NuovaVisita = () => {
     if (accessToken) {
       const attachments = await fetchGmailAttachments(accessToken, msg.id);
       attachments.forEach(att => {
-        if (att.extracted_text) {
-          textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extracted_text}\n`;
+        if (att.extractedText) {
+          textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`;
         }
       });
     }
@@ -126,14 +143,21 @@ const NuovaVisita = () => {
   };
 
   const handleSave = async () => {
-    // 1. Insert Visit
+    // 1. Insert Visit with structured exam fields
     await runCommand(`
-      INSERT INTO visits (worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica, esame_obiettivo, accertamenti_effettuati, giudizio, prescrizioni, scadenza_prossima, finalized)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO visits (
+        worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica,
+        accertamenti_effettuati, eo_cardiaca, eo_respiratoria, eo_cervicale, eo_dorsolombare,
+        eo_spalle, eo_arti_superiori, eo_arti_inferiori, eo_altro, giudizio, prescrizioni, scadenza_prossima, finalized
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `, [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
       visitForm.anamnesi_lavorativa, visitForm.anamnesi_familiare, visitForm.anamnesi_patologica,
-      visitForm.esame_obiettivo, visitForm.accertamenti_effettuati, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
+      visitForm.accertamenti_effettuati, visitForm.eo_cardiaca, visitForm.eo_respiratoria,
+      visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle,
+      visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori, visitForm.eo_altro,
+      visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
     ]);
 
     const lastVisitData = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
@@ -148,9 +172,9 @@ const NuovaVisita = () => {
     if (lastVisitData) {
       const bmi = visitForm.peso / ((visitForm.altezza/100) ** 2);
       await runCommand(`
-        INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [lastVisitData.id, visitForm.peso, visitForm.altezza, bmi, visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza]);
+        INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca, spo2)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [lastVisitData.id, visitForm.peso, visitForm.altezza, bmi, visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza, visitForm.spo2]);
     }
 
     alert("Visita salvata con successo!");
@@ -161,9 +185,9 @@ const NuovaVisita = () => {
 
   const generatePDF = () => {
     const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
-
-    // 1. GIUDIZIO DI IDONEITÀ
     const doc = new jsPDF();
+
+    // GIUDIZIO DI IDONEITÀ
     doc.setFont("helvetica", "bold");
     doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
     doc.setFontSize(10);
@@ -201,7 +225,7 @@ const NuovaVisita = () => {
 
     doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
 
-    // 2. CARTELLA SANITARIA E DI RISCHIO (ALLEGATO 3A)
+    // CARTELLA SANITARIA E DI RISCHIO
     const cartella = new jsPDF();
     cartella.setFontSize(14);
     cartella.setFont("helvetica", "bold");
@@ -209,43 +233,56 @@ const NuovaVisita = () => {
     cartella.setFontSize(10);
     cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 26, { align: 'center' });
 
-    cartella.setFont("helvetica", "bold");
     cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
     cartella.setFont("helvetica", "normal");
     cartella.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 47);
-    cartella.text(`Data di nascita: ${workerData.data_nascita || 'N/D'}`, 20, 53);
-    cartella.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 59);
-    cartella.text(`Azienda: ${workerData.azienda}`, 20, 65);
-    cartella.text(`Mansione: ${workerData.mansione}`, 20, 71);
+    cartella.text(`Azienda: ${workerData.azienda} | Mansione: ${workerData.mansione}`, 20, 53);
 
     cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 2: ANAMNESI", 15, 85);
+    cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
     cartella.setFont("helvetica", "normal");
-    cartella.text("Anamnesi Lavorativa:", 20, 92);
-    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 98, { maxWidth: 165 });
-    cartella.text("Anamnesi Patologica e Familiare:", 20, 115);
-    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 121, { maxWidth: 165 });
+    cartella.text("Lavorativa:", 20, 72);
+    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 78, { maxWidth: 165 });
+    cartella.text("Patologica/Familiare:", 20, 95);
+    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 101, { maxWidth: 165 });
 
     cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 3: ESAME OBIETTIVO E BIOMETRIA", 15, 150);
+    cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, 130);
     cartella.setFont("helvetica", "normal");
-    cartella.text(`Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | BMI: ${(visitForm.peso / ((visitForm.altezza/100)**2)).toFixed(1)}`, 20, 157);
-    cartella.text(`Pressione: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg | FC: ${visitForm.frequenza} bpm`, 20, 163);
-    cartella.text("Esame Obiettivo:", 20, 170);
-    cartella.text(visitForm.esame_obiettivo || "Regolare", 25, 176, { maxWidth: 165 });
+    cartella.text(`Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | BMI: ${(visitForm.peso / ((visitForm.altezza/100)**2)).toFixed(1)}`, 20, 137);
+    cartella.text(`PA: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg | FC: ${visitForm.frequenza} bpm | SpO2: ${visitForm.spo2}%`, 20, 143);
 
-    cartella.setFont("helvetica", "bold");
-    cartella.text("ACCERTAMENTI STRUMENTALI:", 20, 200);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(visitForm.accertamenti_effettuati || "Non eseguiti", 25, 206, { maxWidth: 165 });
+    let currentY = 153;
+    const addEOField = (label: string, text: string) => {
+      if (text) {
+        cartella.setFont("helvetica", "bold");
+        cartella.text(`${label}:`, 20, currentY);
+        cartella.setFont("helvetica", "normal");
+        cartella.text(text, 25, currentY + 6, { maxWidth: 165 });
+        currentY += 15;
+      }
+    };
 
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 4: GIUDIZIO DI IDONEITA", 15, 220);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Giudizio: ${visitForm.giudizio.toUpperCase()}`, 20, 227);
-    cartella.text(`Scadenza: ${visitForm.scadenza_prossima}`, 20, 233);
+    addEOField("Apparato Cardiovascolare", visitForm.eo_cardiaca);
+    addEOField("Apparato Respiratorio", visitForm.eo_respiratoria);
+    addEOField("Apparato Muscoloscheletrico", [visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle, visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori].filter(v => v).join(" | "));
+    addEOField("Altro", visitForm.eo_altro);
+
+    if (visitForm.accertamenti_effettuati) {
+      cartella.setFont("helvetica", "bold");
+      cartella.text("ACCERTAMENTI STRUMENTALI:", 20, currentY);
+      cartella.setFont("helvetica", "normal");
+      cartella.text(visitForm.accertamenti_effettuati, 25, currentY + 6, { maxWidth: 165 });
+    }
 
     cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+  };
+
+  const calculateBMI = () => {
+    if (visitForm.peso && visitForm.altezza) {
+      return (visitForm.peso / ((visitForm.altezza / 100) ** 2)).toFixed(1);
+    }
+    return '--';
   };
 
   return (
@@ -255,7 +292,6 @@ const NuovaVisita = () => {
         <p className="text-gray-500 font-medium mt-1">Conformità D.Lgs 81/08 - Allegato 3A</p>
       </div>
 
-      {/* Progress Stepper */}
       <div className="flex items-center mb-12 px-10">
         {[
           { step: 1, label: 'Selezione' },
@@ -290,17 +326,8 @@ const NuovaVisita = () => {
             </div>
 
             <div className="space-y-3">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anagrafica Attiva</label>
-              <select
-                className="w-full bg-white/50 border border-gray-100 rounded-[20px] p-5 text-xl font-black text-primary outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all appearance-none shadow-inner"
-                value={selectedWorkerId}
-                onChange={e => setSelectedWorkerId(e.target.value)}
-              >
-                <option value="">-- Seleziona dalla lista --</option>
-                {lavoratori.map(l => (
-                  <option key={l.id} value={l.id}>{l.cognome} {l.nome} | {l.azienda}</option>
-                ))}
-              </select>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anagrafica Attiva (Ricerca Rapida)</label>
+              <WorkerSearch onSelect={setSelectedWorkerId} />
             </div>
 
             {workerData && (
@@ -309,12 +336,20 @@ const NuovaVisita = () => {
                   <p className="text-tealAction font-black text-lg uppercase tracking-tight">{workerData.azienda}</p>
                   <p className="text-gray-500 font-bold text-sm">Mansione: <span className="text-primary font-black">{workerData.mansione}</span></p>
                 </div>
-                <button
-                  onClick={() => setStep(2)}
-                  className="btn-teal flex items-center gap-3 px-8"
-                >
-                  Inizia Visita <RefreshCw size={18} />
-                </button>
+                <div className="flex gap-4">
+                  <select
+                    className="bg-white border border-gray-100 rounded-xl px-4 font-black text-primary text-sm outline-none focus:ring-2 focus:ring-primary/10"
+                    value={visitForm.tipo_visita}
+                    onChange={e => setVisitForm({...visitForm, tipo_visita: e.target.value})}
+                  >
+                    <option value="preventiva">Visita Preventiva</option>
+                    <option value="periodica">Visita Periodica</option>
+                    <option value="richiesta">Su Richiesta</option>
+                    <option value="cambio mansione">Cambio Mansione</option>
+                    <option value="rientro">Dopo Assenza &gt;60gg</option>
+                  </select>
+                  <button onClick={() => setStep(2)} className="btn-teal flex items-center gap-3 px-8">Inizia <RefreshCw size={18} /></button>
+                </div>
               </div>
             )}
           </div>
@@ -325,155 +360,141 @@ const NuovaVisita = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 text-primary">
                 <div className="p-3 bg-primary/5 rounded-2xl"><Clipboard size={24} strokeWidth={2.5} /></div>
-                <h2 className="text-2xl font-black tracking-tight">Anamnesi e Biometria</h2>
+                <h2 className="text-2xl font-black tracking-tight">Anamnesi</h2>
               </div>
-
-              <div className="flex items-center gap-4 bg-warmWhite/50 p-2 rounded-2xl border border-gray-100">
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Paziente Selezionato</span>
-                  <span className="text-sm font-black text-primary">{workerData.cognome} {workerData.nome}</span>
-                </div>
-                <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary font-black">
-                  {workerData.cognome[0]}{workerData.nome[0]}
-                </div>
+              <div className="bg-warmWhite/50 p-2 px-4 rounded-2xl border border-gray-100 font-black text-primary uppercase text-xs">
+                {workerData.cognome} {workerData.nome}
               </div>
             </div>
 
-            {/* Gmail Import Section - Redesigned */}
-            <div className="bg-accent/5 border border-accent/10 rounded-3xl p-6 relative overflow-hidden">
-              <div className="flex justify-between items-center mb-4 relative z-10">
-                <div>
-                  <h3 className="text-accent font-black flex items-center gap-2 text-sm uppercase tracking-tight">
-                    <Mail size={18} /> Acquisizione Documenti Gmail
-                  </h3>
-                  <p className="text-xs font-medium text-gray-500 mt-1">Sincronizzazione messaggi da {workerData.email}</p>
-                </div>
-                <button
-                  onClick={handleAuthAndFetch}
-                  disabled={loadingGmail || !workerData.email}
-                  className="btn-accent flex items-center gap-2 text-xs py-2 px-4 shadow-accent/10"
-                >
-                  {loadingGmail ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />}
-                  Sincronizza Mail
+            <div className="bg-accent/5 border border-accent/10 rounded-3xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-accent font-black flex items-center gap-2 text-sm uppercase tracking-tight">
+                  <Mail size={18} /> Acquisizione Gmail
+                </h3>
+                <button onClick={handleAuthAndFetch} disabled={loadingGmail} className="btn-accent flex items-center gap-2 text-xs py-2 px-4">
+                  {loadingGmail ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />} Sincronizza
                 </button>
               </div>
-
-              {gmailMessages.length > 0 ? (
-                <div className="space-y-3 max-h-48 overflow-y-auto pr-2 relative z-10 custom-scrollbar">
+              {gmailMessages.length > 0 && (
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                   {gmailMessages.map(msg => (
-                    <div key={msg.id} className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-accent/10 text-xs flex justify-between items-center gap-4 hover:bg-white transition-colors">
-                      <div className="flex-1">
-                        <div className="font-black text-primary mb-1">{msg.date}</div>
-                        <div className="text-gray-500 font-medium italic line-clamp-1">"{msg.snippet}"</div>
-                      </div>
-                      <button
-                        onClick={() => importEmailText(msg)}
-                        className="text-accent hover:bg-accent hover:text-white p-2.5 rounded-xl border border-accent/20 transition-all font-black flex items-center gap-2 uppercase tracking-tighter"
-                      >
-                        <Copy size={14} /> Importa
-                      </button>
+                    <div key={msg.id} className="bg-white/80 p-3 rounded-xl border border-accent/10 text-[10px] flex justify-between items-center gap-4">
+                      <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
+                      <button onClick={() => importEmailText(msg)} className="text-accent hover:underline font-black uppercase tracking-tighter shrink-0">Importa</button>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-4 bg-white/30 rounded-2xl border border-dashed border-accent/20">
-                   <p className="text-xs text-accent/60 font-bold italic uppercase tracking-widest">Nessuna comunicazione recente trovata</p>
-                </div>
               )}
-              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                <Mail size={120} />
-              </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
-                  <textarea
-                    className="input-standard h-32"
-                    placeholder="Riepilogo esposizioni pregresse..."
-                    value={visitForm.anamnesi_lavorativa}
-                    onChange={e => setVisitForm({...visitForm, anamnesi_lavorativa: e.target.value})}
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Familiare e Patologica</label>
-                  <textarea
-                    className="input-standard h-32"
-                    placeholder="Patologie pregresse, familiarità..."
-                    value={visitForm.anamnesi_patologica}
-                    onChange={e => setVisitForm({...visitForm, anamnesi_patologica: e.target.value})}
-                  />
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
+                <textarea className="input-standard h-40" value={visitForm.anamnesi_lavorativa} onChange={e => setVisitForm({...visitForm, anamnesi_lavorativa: e.target.value})} />
               </div>
-
-              <div className="bg-primary/5 p-8 rounded-[32px] border border-primary/5 space-y-6">
-                <div className="flex items-center gap-2">
-                   <div className="w-1.5 h-6 bg-primary rounded-full" />
-                   <p className="font-black text-sm text-primary uppercase tracking-widest">Parametri Biometrici</p>
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Peso (kg)</label>
-                    <input type="number" className="input-standard font-black text-lg" value={visitForm.peso} onChange={e => setVisitForm({...visitForm, peso: parseFloat(e.target.value)})} />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Altezza (cm)</label>
-                    <input type="number" className="input-standard font-black text-lg" value={visitForm.altezza} onChange={e => setVisitForm({...visitForm, altezza: parseInt(e.target.value)})} />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PA Sistolica</label>
-                    <input type="number" className="input-standard font-black text-lg text-tealAction" value={visitForm.p_sistolica} onChange={e => setVisitForm({...visitForm, p_sistolica: parseInt(e.target.value)})} />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PA Diastolica</label>
-                    <input type="number" className="input-standard font-black text-lg text-tealAction" value={visitForm.p_diastolica} onChange={e => setVisitForm({...visitForm, p_diastolica: parseInt(e.target.value)})} />
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-primary/10">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-gray-400">BMI CALCOLATO</span>
-                    <span className="text-2xl font-black text-primary">{(visitForm.peso / ((visitForm.altezza/100)**2)).toFixed(1)}</span>
-                  </div>
-                </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Patologica / Familiare</label>
+                <textarea className="input-standard h-40" value={visitForm.anamnesi_patologica} onChange={e => setVisitForm({...visitForm, anamnesi_patologica: e.target.value})} />
               </div>
             </div>
             <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
-              <button onClick={() => setStep(1)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Annulla / Indietro</button>
-              <button onClick={() => setStep(3)} className="btn-teal px-12 py-4">Continua Visita</button>
+              <button onClick={() => setStep(1)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
+              <button onClick={() => setStep(3)} className="btn-teal px-12 py-4">Prossimo Step</button>
             </div>
           </div>
         )}
 
         {step === 3 && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="flex items-center gap-4 text-primary">
               <div className="p-3 bg-primary/5 rounded-2xl"><Activity size={24} strokeWidth={2.5} /></div>
-              <h2 className="text-2xl font-black tracking-tight">Esame Obiettivo e Accertamenti</h2>
+              <h2 className="text-2xl font-black tracking-tight">Parametri e Esame Obiettivo</h2>
             </div>
 
-            <div className="grid grid-cols-1 gap-8">
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Accertamenti Strumentali Effettuati</label>
-                <textarea
-                  placeholder="es. Audiometria (normale), Spirometria (FVC 95%), ECG (ritmo sinusale)..."
-                  className="input-standard h-32 border-tealAction/20 focus:border-tealAction focus:ring-tealAction/5"
-                  value={visitForm.accertamenti_effettuati}
-                  onChange={e => setVisitForm({...visitForm, accertamenti_effettuati: e.target.value})}
-                />
+            {/* Vital Signs Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-primary/40"><Heart size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Sistolica</span></div>
+                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.p_sistolica} onChange={e => setVisitForm({...visitForm, p_sistolica: parseInt(e.target.value)})} />
+                <span className="text-[8px] font-bold text-gray-400 uppercase">mmHg</span>
               </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Risultanze Esame Obiettivo</label>
-                <textarea
-                  placeholder="es. Torace normoconformato, MV presente su tutto l'ambito, toni cardiaci puri..."
-                  className="input-standard h-48"
-                  value={visitForm.esame_obiettivo}
-                  onChange={e => setVisitForm({...visitForm, esame_obiettivo: e.target.value})}
-                />
+              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-primary/40"><Heart size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Diastolica</span></div>
+                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.p_diastolica} onChange={e => setVisitForm({...visitForm, p_diastolica: parseInt(e.target.value)})} />
+                <span className="text-[8px] font-bold text-gray-400 uppercase">mmHg</span>
+              </div>
+              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-tealAction/40"><Activity size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Frequenza</span></div>
+                <input type="number" className="bg-transparent font-black text-xl text-tealAction outline-none" value={visitForm.frequenza} onChange={e => setVisitForm({...visitForm, frequenza: parseInt(e.target.value)})} />
+                <span className="text-[8px] font-bold text-gray-400 uppercase">bpm</span>
+              </div>
+              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-accent/40"><Weight size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Peso</span></div>
+                <input type="number" className="bg-transparent font-black text-xl text-accent outline-none" value={visitForm.peso} onChange={e => setVisitForm({...visitForm, peso: parseFloat(e.target.value)})} />
+                <span className="text-[8px] font-bold text-gray-400 uppercase">kg</span>
+              </div>
+              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-accent/40"><Ruler size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Altezza</span></div>
+                <input type="number" className="bg-transparent font-black text-xl text-accent outline-none" value={visitForm.altezza} onChange={e => setVisitForm({...visitForm, altezza: parseInt(e.target.value)})} />
+                <span className="text-[8px] font-bold text-gray-400 uppercase">cm</span>
+              </div>
+              <div className="bg-primary/5 p-4 rounded-3xl border border-primary/10 flex flex-col justify-center items-center gap-1">
+                <span className="text-[9px] font-black text-primary uppercase tracking-widest">BMI</span>
+                <span className="text-2xl font-black text-primary">{calculateBMI()}</span>
+              </div>
+              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-primary/40"><Wind size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">SpO2 %</span></div>
+                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.spo2} onChange={e => setVisitForm({...visitForm, spo2: parseInt(e.target.value)})} />
               </div>
             </div>
+
+            {/* Structured EO Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                {[
+                  { id: 'eo_cardiaca', label: 'Apparato Cardiovascolare', icon: <Heart size={16} /> },
+                  { id: 'eo_respiratoria', label: 'Apparato Respiratorio', icon: <Wind size={16} /> },
+                  { id: 'eo_cervicale', label: 'Rachide Cervicale', icon: <Stethoscope size={16} /> },
+                  { id: 'eo_dorsolombare', label: 'Rachide Dorsolombare', icon: <Stethoscope size={16} /> },
+                ].map(field => (
+                  <div key={field.id} className="flex flex-col gap-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                      {field.icon} {field.label}
+                    </label>
+                    <textarea
+                      className="input-standard h-20 text-sm"
+                      placeholder="Note o 'Regolare'..."
+                      value={(visitForm as any)[field.id]}
+                      onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-6">
+                {[
+                  { id: 'eo_spalle', label: 'Spalle', icon: <Stethoscope size={16} /> },
+                  { id: 'eo_arti_superiori', label: 'Arti Superiori (Gomiti, Polsi, Mani)', icon: <Stethoscope size={16} /> },
+                  { id: 'eo_arti_inferiori', label: 'Arti Inferiori', icon: <Stethoscope size={16} /> },
+                  { id: 'eo_altro', label: 'Altro / Accertamenti Strumentali', icon: <Activity size={16} /> },
+                ].map(field => (
+                  <div key={field.id} className="flex flex-col gap-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                      {field.icon} {field.label}
+                    </label>
+                    <textarea
+                      className="input-standard h-20 text-sm"
+                      placeholder="Note o 'Regolare'..."
+                      value={(visitForm as any)[field.id]}
+                      onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
-              <button onClick={() => setStep(2)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Indietro</button>
+              <button onClick={() => setStep(2)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <button onClick={() => setStep(4)} className="btn-teal px-12 py-4">Vai al Giudizio</button>
             </div>
           </div>
@@ -483,69 +504,37 @@ const NuovaVisita = () => {
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="flex items-center gap-4 text-primary">
               <div className="p-3 bg-accent/5 rounded-2xl text-accent"><CheckCircle size={24} strokeWidth={2.5} /></div>
-              <h2 className="text-2xl font-black tracking-tight">Giudizio Finale di Idoneità</h2>
+              <h2 className="text-2xl font-black tracking-tight">Giudizio Finale</h2>
             </div>
 
-            <div className="bg-accent/5 p-8 rounded-[40px] border border-accent/10">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Giudizio di Idoneità</label>
-                  <select
-                    className="input-standard font-black text-primary text-lg"
-                    value={visitForm.giudizio}
-                    onChange={e => setVisitForm({...visitForm, giudizio: e.target.value})}
-                  >
-                    <option value="idoneo">IDONEO</option>
-                    <option value="idoneo con prescrizioni">IDONEO CON PRESCRIZIONI</option>
-                    <option value="idoneo con limitazioni">IDONEO CON LIMITAZIONI</option>
-                    <option value="non idoneo temporaneo">NON IDONEO TEMPORANEO</option>
-                    <option value="non idoneo permanente">NON IDONEO PERMANENTE</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Scadenza Sorveglianza</label>
-                  <input
-                    type="date"
-                    className="input-standard font-black text-primary"
-                    value={visitForm.scadenza_prossima}
-                    onChange={e => setVisitForm({...visitForm, scadenza_prossima: e.target.value})}
-                  />
-                </div>
-                <div className="col-span-full flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prescrizioni e Note Legali</label>
-                  <textarea
-                    className="input-standard h-32 bg-white/80"
-                    placeholder="Dettagliare prescrizioni specifiche o limitazioni d'uso..."
-                    value={visitForm.prescrizioni}
-                    onChange={e => setVisitForm({...visitForm, prescrizioni: e.target.value})}
-                  />
-                </div>
+            <div className="bg-accent/5 p-8 rounded-[40px] border border-accent/10 grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Giudizio di Idoneità</label>
+                <select className="input-standard font-black text-primary" value={visitForm.giudizio} onChange={e => setVisitForm({...visitForm, giudizio: e.target.value})}>
+                  <option value="idoneo">IDONEO</option>
+                  <option value="idoneo con prescrizioni">IDONEO CON PRESCRIZIONI</option>
+                  <option value="idoneo con limitazioni">IDONEO CON LIMITAZIONI</option>
+                  <option value="non idoneo temporaneo">NON IDONEO TEMPORANEO</option>
+                  <option value="non idoneo permanente">NON IDONEO PERMANENTE</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prossima Visita</label>
+                <input type="date" className="input-standard font-black text-primary" value={visitForm.scadenza_prossima} onChange={e => setVisitForm({...visitForm, scadenza_prossima: e.target.value})} />
+              </div>
+              <div className="col-span-full flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prescrizioni / Note</label>
+                <textarea className="input-standard h-32" value={visitForm.prescrizioni} onChange={e => setVisitForm({...visitForm, prescrizioni: e.target.value})} />
               </div>
             </div>
 
-            <div className="bg-primary/5 p-6 rounded-3xl flex items-center gap-4 text-primary text-xs font-black uppercase tracking-tighter">
-              <Shield size={20} className="shrink-0" />
-              <p>Il salvataggio finalizzerà la visita e genererà i documenti PDF (Giudizio e Cartella 3A) pronti per la firma.</p>
-            </div>
-
-            <div className="flex justify-between items-center mt-10 pt-8 border-t border-gray-50">
-              <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Indietro</button>
+            <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
+              <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <div className="flex gap-4">
-                <a
-                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Visita+periodica+programmata+per+${workerData.cognome}+${workerData.nome}+(${workerData.azienda})&sf=true&output=xml`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-teal px-6 py-5 flex items-center gap-3"
-                  title="Pianifica prossima visita su Google Calendar"
-                >
-                  <RefreshCw size={22} />
-                </a>
-                <button
-                  onClick={handleSave}
-                  className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl"
-                >
-                  <Download size={22} strokeWidth={3} /> Finalizza e Stampa PDF
-                </button>
+                 <a
+                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
+                  target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
+                 <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva e Stampa</button>
               </div>
             </div>
           </div>

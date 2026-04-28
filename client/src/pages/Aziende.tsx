@@ -25,19 +25,52 @@ const Aziende = () => {
     fetchAziende();
   }, []);
 
+  const handleDelete = async (id: number, name: string) => {
+    if (confirm(`Sei sicuro di voler eliminare l'azienda ${name}? Questa azione eliminerà anche tutti i protocolli associati.`)) {
+      await runCommand("DELETE FROM companies WHERE id = ?", [id]);
+      await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+        ["DELETE", "companies", `Eliminata azienda: ${name} (ID: ${id})`]);
+      fetchAziende();
+    }
+  };
+
+  const handleEdit = (azienda: any) => {
+    setFormData({
+      ragione_sociale: azienda.ragione_sociale,
+      p_iva: azienda.p_iva || '',
+      ateco: azienda.ateco || '',
+      sede_operativa: azienda.sede_operativa || '',
+      referente: azienda.referente || '',
+      rspp: azienda.rspp || '',
+      rls: azienda.rls || ''
+    });
+    setEditingId(azienda.id);
+    setShowForm(true);
+  };
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await runCommand(
-      `INSERT INTO companies (ragione_sociale, p_iva, ateco, sede_operativa, referente, rspp, rls)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls]
-    );
+    if (editingId) {
+      await runCommand(
+        `UPDATE companies SET ragione_sociale = ?, p_iva = ?, ateco = ?, sede_operativa = ?, referente = ?, rspp = ?, rls = ? WHERE id = ?`,
+        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls, editingId]
+      );
+    } else {
+      await runCommand(
+        `INSERT INTO companies (ragione_sociale, p_iva, ateco, sede_operativa, referente, rspp, rls)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls]
+      );
+    }
 
     // Audit log for legal compliance
     await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
       ["INSERT", "companies", `Nuova azienda: ${formData.ragione_sociale}`]);
 
     setShowForm(false);
+    setEditingId(null);
     setFormData({ ragione_sociale: '', p_iva: '', ateco: '', sede_operativa: '', referente: '', rspp: '', rls: '' });
     fetchAziende();
   };
@@ -200,8 +233,18 @@ const Aziende = () => {
                   </td>
                   <td>
                     <div className="flex justify-center gap-2">
-                      <button className="p-3 hover:bg-tealAction/10 text-tealAction rounded-2xl transition-all"><Edit2 size={18} /></button>
-                      <button className="p-3 hover:bg-accent/10 text-accent rounded-2xl transition-all"><Trash2 size={18} /></button>
+                      <button
+                        onClick={() => handleEdit(azienda)}
+                        className="p-3 hover:bg-tealAction/10 text-tealAction rounded-2xl transition-all"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(azienda.id, azienda.ragione_sociale)}
+                        className="p-3 hover:bg-accent/10 text-accent rounded-2xl transition-all"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                   </td>
                 </tr>

@@ -42,6 +42,20 @@ Il sistema è configurato per essere completamente automatico:
 - **Configurazione**: Il file `netlify.toml` nella root gestisce il routing della SPA (Single Page Application), assicurando che React Router funzioni correttamente reindirizzando tutte le richieste verso `index.html`.
 - **Database**: Essendo un'app serverless con SQLite locale (IndexedDB), non è necessaria alcuna configurazione di database sul server.
 
+## 4. Configurazione Google OAuth2 (Gmail)
+
+Per far funzionare l'integrazione Gmail sul dominio Netlify:
+
+1. Vai sulla [Google Cloud Console](https://console.cloud.google.com/).
+2. Seleziona il tuo progetto e vai in **API e Servizi > Credenziali**.
+3. Modifica l'**ID client OAuth 2.0** creato per l'app.
+4. Sotto **Origini JavaScript autorizzate**, aggiungi:
+   - `https://gestionalemedlav.netlify.app`
+5. Sotto **URI di reindirizzamento autorizzati**, aggiungi:
+   - `https://gestionalemedlav.netlify.app`
+6. Salva le modifiche.
+7. Copia il **Client ID** e incollalo nelle **Impostazioni** dell'app su Netlify.
+
 ---
 
 *L'applicazione è ora pronta per essere distribuita all'indirizzo:*

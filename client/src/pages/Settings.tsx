@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand, getDB } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Key } from 'lucide-react';
-import { set, del } from 'idb-keyval';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
+import { set, del, get } from 'idb-keyval';
 
 const Settings = () => {
   const [doctor, setDoctor] = useState({
@@ -12,8 +12,8 @@ const Settings = () => {
   });
 
   const [googleConfig, setGoogleConfig] = useState({
-    clientId: localStorage.getItem('google_client_id') || '',
-    clientSecret: localStorage.getItem('google_client_secret') || ''
+    clientId: '',
+    clientSecret: ''
   });
 
   const [logs, setLogs] = useState<any[]>([]);
@@ -25,11 +25,19 @@ const Settings = () => {
     }
     const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
     setLogs(auditLogs);
+
+    // Load Google config from IndexedDB
+    const loadGoogle = async () => {
+      const cid = await get('google_client_id');
+      const cs = await get('google_client_secret');
+      setGoogleConfig({ clientId: cid || '', clientSecret: cs || '' });
+    };
+    loadGoogle();
   }, []);
 
-  const saveGoogleConfig = () => {
-    localStorage.setItem('google_client_id', googleConfig.clientId);
-    localStorage.setItem('google_client_secret', googleConfig.clientSecret);
+  const saveGoogleConfig = async () => {
+    await set('google_client_id', googleConfig.clientId);
+    await set('google_client_secret', googleConfig.clientSecret);
     alert("Configurazione Google salvata!");
   };
 
@@ -183,14 +191,28 @@ const Settings = () => {
           <div className="glass-card rounded-[40px] overflow-hidden border-2 border-accent/5">
             <div className="p-8 bg-accent text-white font-black flex items-center gap-4">
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                <Key size={20} />
+                <Mail size={20} />
               </div>
-              <h2 className="text-base uppercase tracking-tight">Google API</h2>
+              <h2 className="text-base uppercase tracking-tight">Integrazione Gmail</h2>
             </div>
             <div className="p-8 space-y-8">
+              <div className="bg-white/50 p-6 rounded-3xl border border-accent/10 space-y-4">
+                <h4 className="text-xs font-black text-accent uppercase tracking-widest">Istruzioni Configurazione</h4>
+                <ol className="text-[11px] font-medium text-gray-600 space-y-3 list-decimal ml-4">
+                  <li>
+                    Vai sulla <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-accent underline font-black">Google Cloud Console</a>
+                  </li>
+                  <li>Crea un nuovo progetto o selezionane uno esistente.</li>
+                  <li>Abilita le <strong>Gmail API</strong> dalla sezione "API e servizi".</li>
+                  <li>Configura la "Schermata di consenso OAuth" (User type: External).</li>
+                  <li>Crea le <strong>Credenziali</strong>: ID client OAuth 2.0 (Applicazione Web).</li>
+                  <li>Aggiungi <code>https://gestionalemedlav.netlify.app</code> agli <strong>Origini JavaScript autorizzate</strong>.</li>
+                </ol>
+              </div>
+
               <div className="space-y-6">
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Client ID OAuth2</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Google Client ID</label>
                   <input
                     className="input-standard font-mono text-[10px] bg-accent/5 border-accent/10 focus:ring-accent/5"
                     value={googleConfig.clientId}
@@ -198,21 +220,12 @@ const Settings = () => {
                     placeholder="xxxxxx.apps.googleusercontent.com"
                   />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 text-accent">Client Secret</label>
-                  <input
-                    type="password"
-                    className="input-standard font-mono text-xs bg-accent/5 border-accent/10"
-                    value={googleConfig.clientSecret}
-                    onChange={e => setGoogleConfig({...googleConfig, clientSecret: e.target.value})}
-                  />
-                </div>
               </div>
               <button
                 onClick={saveGoogleConfig}
-                className="btn-accent w-full py-4 shadow-accent/20"
+                className="btn-accent w-full py-4 shadow-2xl shadow-accent/20"
               >
-                Aggiorna Chiavi
+                Salva Configurazione Gmail
               </button>
             </div>
           </div>

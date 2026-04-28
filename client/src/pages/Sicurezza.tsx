@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { GraduationCap, Plus, User, Package } from 'lucide-react';
+import WorkerSearch from '../components/WorkerSearch';
 
 const Sicurezza = () => {
-  const [workers, setWorkers] = useState<any[]>([]);
   const [training, setTraining] = useState<any[]>([]);
   const [ppe, setPpe] = useState<any[]>([]);
 
@@ -15,7 +15,6 @@ const Sicurezza = () => {
   const [pForm, setPForm] = useState({ dispositivo: '', data: '', scadenza: '' });
 
   const fetchData = () => {
-    setWorkers(executeQuery("SELECT id, nome, cognome FROM workers ORDER BY cognome"));
     setTraining(executeQuery(`
       SELECT training_records.*, workers.nome, workers.cognome
       FROM training_records
@@ -64,19 +63,12 @@ const Sicurezza = () => {
       </div>
 
       <div className="mb-10 glass-card p-8 rounded-[40px] flex flex-col md:flex-row items-center gap-6">
-        <div className="bg-primary/5 p-4 rounded-2xl text-primary">
+        <div className="bg-primary/5 p-4 rounded-2xl text-primary shrink-0">
           <User size={32} />
         </div>
         <div className="flex-1 w-full">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block mb-2">Lavoratore di Riferimento</label>
-          <select
-            className="w-full input-standard font-black text-primary text-lg"
-            value={selectedWorker}
-            onChange={e => setSelectedWorker(e.target.value)}
-          >
-            <option value="">-- Seleziona dalla lista --</option>
-            {workers.map(w => <option key={w.id} value={w.id}>{w.cognome} {w.nome}</option>)}
-          </select>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block mb-2">Ricerca Lavoratore per Nome, Cognome o Azienda</label>
+          <WorkerSearch onSelect={setSelectedWorker} className="w-full" />
         </div>
       </div>
 
