@@ -101,6 +101,15 @@ const Lavoratori = () => {
     });
   };
 
+  const handleDelete = async (id: number, name: string) => {
+    if (confirm(`Sei sicuro di voler eliminare il lavoratore ${name}? Questa azione è irreversibile.`)) {
+      await runCommand("DELETE FROM workers WHERE id = ?", [id]);
+      await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+        ["DELETE", "workers", `Eliminato lavoratore: ${name} (ID: ${id})`]);
+      fetchData();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -466,7 +475,10 @@ const Lavoratori = () => {
                       >
                         <Edit2 size={18} />
                       </button>
-                      <button className="w-10 h-10 flex items-center justify-center rounded-2xl bg-accent/5 text-accent hover:bg-accent hover:text-white transition-all shadow-sm">
+                      <button
+                        onClick={() => handleDelete(l.id, `${l.cognome} ${l.nome}`)}
+                        className="w-10 h-10 flex items-center justify-center rounded-2xl bg-accent/5 text-accent hover:bg-accent hover:text-white transition-all shadow-sm"
+                      >
                         <Trash2 size={18} />
                       </button>
                       <ChevronRight size={20} className="text-gray-200 group-hover:text-primary transition-colors ml-2" />

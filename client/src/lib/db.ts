@@ -199,7 +199,13 @@ const createTables = (database: Database) => {
       ['Rumore', 'fisico'], ['Vibrazioni', 'fisico'], ['Radiazioni', 'fisico'],
       ['Movimentazione Carichi', 'ergonomico'], ['Video-terminalisti', 'ergonomico'],
       ['Agenti Chimici', 'chimico'], ['Agenti Biologici', 'biologico'],
-      ['Lavoro Notturno', 'organizzativo'], ['Stress Lavoro Correlato', 'psicosociale']
+      ['Lavoro Notturno', 'organizzativo'], ['Stress Lavoro Correlato', 'psicosociale'],
+      ['Movimentazione manuale dei pazienti', 'ergonomico'],
+      ['Rischio biologico (contatto con pazienti)', 'biologico'],
+      ['Rischio da punture accidentali', 'biologico'],
+      ['Stress lavoro-correlato in ambito sanitario', 'psicosociale'],
+      ['Posture incongrue prolungate', 'ergonomico'],
+      ['Lavoro su turni/notturno in ambito sanitario', 'organizzativo']
     ];
     standardRisks.forEach(r => {
       database.run("INSERT INTO risks_master (nome, categoria) VALUES (?, ?)", r);
@@ -237,7 +243,16 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE workers ADD COLUMN protocol_override_reason TEXT;",
     "ALTER TABLE visits ADD COLUMN accertamenti_effettuati TEXT;",
     "CREATE TABLE IF NOT EXISTS training_records (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, corso TEXT NOT NULL, data_completamento DATE, scadenza DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));",
-    "CREATE TABLE IF NOT EXISTS ppe_assigned (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, dispositivo TEXT NOT NULL, data_consegna DATE, scadenza_sostituzione DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));"
+    "CREATE TABLE IF NOT EXISTS ppe_assigned (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, dispositivo TEXT NOT NULL, data_consegna DATE, scadenza_sostituzione DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));",
+    "ALTER TABLE biometrics ADD COLUMN spo2 INTEGER;",
+    "ALTER TABLE visits ADD COLUMN eo_cardiaca TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_respiratoria TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_cervicale TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_dorsolombare TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;"
   ];
 
   migrations.forEach(m => {
