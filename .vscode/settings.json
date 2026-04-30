@@ -1,0 +1,6 @@
+{
+    "typescript.tsdk": "client/node_modules/typescript/lib",
+    "eslint.workingDirectories": ["client"],
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+}
