@@ -103,10 +103,43 @@ const INITIAL_VISIT_STATE = {
   }
 };
 
+interface SectionTitleProps {
+  num: string;
+  title: string;
+  icon: React.ElementType;
+}
+
+const SectionTitle = ({ num, title, icon: Icon }: SectionTitleProps) => (
+  <div className="flex items-center gap-4 mb-8 border-b border-gray-100 pb-4">
+    <div className="w-10 h-10 bg-primary/5 rounded-2xl flex items-center justify-center text-primary font-black text-sm shadow-inner">{num}</div>
+    <Icon size={20} className="text-tealAction" />
+    <h3 className="font-black text-primary uppercase tracking-tight text-lg">{title}</h3>
+  </div>
+);
+
+interface Worker {
+  id: number;
+  nome: string;
+  cognome: string;
+  codice_fiscale: string;
+  data_nascita: string;
+  mansione: string;
+  data_assunzione: string;
+  domicilio?: string;
+  telefono?: string;
+  company_id: number;
+}
+
+interface Company {
+  id: number;
+  ragione_sociale: string;
+  sede_operativa?: string;
+}
+
 const NuovaVisita = () => {
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
-  const [workerData, setWorkerData] = useState<any>(null);
-  const [companyData, setCompanyData] = useState<any>(null);
+  const [workerData, setWorkerData] = useState<Worker | null>(null);
+  const [companyData, setCompanyData] = useState<Company | null>(null);
   const [step, setStep] = useState(1);
   const [visitData, setVisitData] = useState(INITIAL_VISIT_STATE);
 
@@ -141,9 +174,9 @@ const NuovaVisita = () => {
 
       if (prot) {
         const esami = JSON.parse(prot.esami || '[]');
-        const needsRachide = esami.some((e: any) => e.nome.toLowerCase().includes('rachide'));
-        const hasAudio = esami.some((e: any) => e.nome.toLowerCase().includes('audiometria'));
-        const hasSpiro = esami.some((e: any) => e.nome.toLowerCase().includes('spirometria'));
+        const needsRachide = esami.some((e: { nome: string }) => e.nome.toLowerCase().includes('rachide'));
+        const hasAudio = esami.some((e: { nome: string }) => e.nome.toLowerCase().includes('audiometria'));
+        const hasSpiro = esami.some((e: { nome: string }) => e.nome.toLowerCase().includes('spirometria'));
 
         setVisitData(prev => ({
           ...prev,
@@ -223,14 +256,6 @@ const NuovaVisita = () => {
 
     doc.save(`CSR_ART41_${workerData?.cognome}_${visitData.sezione1.data_visita}.pdf`);
   };
-
-  const SectionTitle = ({ num, title, icon: Icon }: { num: string, title: string, icon: any }) => (
-    <div className="flex items-center gap-4 mb-8 border-b border-gray-100 pb-4">
-      <div className="w-10 h-10 bg-primary/5 rounded-2xl flex items-center justify-center text-primary font-black text-sm shadow-inner">{num}</div>
-      <Icon size={20} className="text-tealAction" />
-      <h3 className="font-black text-primary uppercase tracking-tight text-lg">{title}</h3>
-    </div>
-  );
 
   return (
     <div className="p-10 max-w-7xl mx-auto pb-40 font-sans">
