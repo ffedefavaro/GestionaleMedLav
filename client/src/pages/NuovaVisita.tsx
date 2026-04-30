@@ -11,13 +11,69 @@ import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
 
+interface Worker {
+  id: number;
+  company_id: number;
+  nome: string;
+  cognome: string;
+  codice_fiscale: string;
+  email?: string;
+  data_nascita?: string;
+  data_assunzione?: string;
+  protocol_id?: number;
+  is_protocol_customized: number;
+  custom_protocol?: string;
+  protocol_override_reason?: string;
+  azienda?: string;
+  permanent_anamnesis?: string;
+}
+
+interface RiskMaster {
+  nome: string;
+}
+
+interface WorkHistoryItem {
+  azienda?: string;
+  mansione?: string;
+  periodo?: string;
+  [key: string]: any;
+}
+
+interface AnamnesisState {
+  storia_lavorativa: WorkHistoryItem[];
+  patologica_lavorativa: {
+    infortuni: { status: string; numero: number; tipo: string; anno_ultimo: string };
+    malattie_prof: { status: string; quale: string; anno: string };
+    limitazioni_prev: { status: string; testo: string };
+  };
+  patologica_generale: {
+    cardiovascolare: { status: string; note: string };
+    respiratorio: { status: string; note: string };
+    muscoloscheletrico: { status: string; note: string };
+    neurologico: { status: string; note: string };
+    psichiatrico: { status: string; note: string };
+    metabolico: { status: string; note: string };
+    altro: { status: string; note: string };
+  };
+  abitudini: {
+    fumo: { status: string; n_sigarette: number };
+    alcol: string;
+    attivita_fisica: string;
+    farmaci: string;
+  };
+  familiare: {
+    patologie: string[];
+    note: string;
+  };
+}
+
 const NuovaVisita = () => {
-  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [hasGoogleId, setHasGoogleId] = useState(false);
-  const [workerData, setWorkerData] = useState<any>(null);
+  const [workerData, setWorkerData] = useState<Worker | null>(null);
   const [step, setStep] = useState(1);
-  const [risksMaster, setRisksMaster] = useState<any[]>([]);
+  const [risksMaster, setRisksMaster] = useState<RiskMaster[]>([]);
 
   // Gmail State
   const [loadingGmail, setLoadingGmail] = useState(false);
@@ -47,8 +103,8 @@ const NuovaVisita = () => {
     eo_altro: ''
   });
 
-  const [anamnesis, setAnamnesis] = useState({
-    storia_lavorativa: [] as any[],
+  const [anamnesis, setAnamnesis] = useState<AnamnesisState>({
+    storia_lavorativa: [],
     patologica_lavorativa: {
       infortuni: { status: 'no', numero: 0, tipo: '', anno_ultimo: '' },
       malattie_prof: { status: 'no', quale: '', anno: '' },
@@ -70,32 +126,27 @@ const NuovaVisita = () => {
       farmaci: ''
     },
     familiare: {
-      patologie: [] as string[],
+      patologie: [],
       note: ''
     }
   });
 
   useEffect(() => {
-    fetchWorkers();
-    setRisksMaster(executeQuery("SELECT nome FROM risks_master ORDER BY nome"));
-    get('google_client_id').then(id => setHasGoogleId(!!id));
-  }, []);
-
-  const fetchWorkers = () => {
     const data = executeQuery(`
       SELECT workers.*, companies.ragione_sociale as azienda
       FROM workers
       JOIN companies ON workers.company_id = companies.id
     `);
     setLavoratori(data);
-  };
+    const risks = executeQuery("SELECT nome FROM risks_master ORDER BY nome");
+    setRisksMaster(risks);
+    get('google_client_id').then(id => setHasGoogleId(!!id));
+  }, []);
 
   useEffect(() => {
     if (selectedWorkerId) {
       const worker = lavoratori.find(l => l.id.toString() === selectedWorkerId);
       if (worker) {
-        setWorkerData(worker);
-
         // Load permanent anamnesis if exists
         if (worker.permanent_anamnesis) {
           try {
@@ -215,7 +266,7 @@ const NuovaVisita = () => {
     setAnamnesis({ ...anamnesis, storia_lavorativa: newList });
   };
 
-  const updateExperience = (index: number, field: string, value: any) => {
+  const updateExperience = (index: number, field: string, value: unknown) => {
     const newList = [...anamnesis.storia_lavorativa];
     newList[index] = { ...newList[index], [field]: value };
     setAnamnesis({ ...anamnesis, storia_lavorativa: newList });
@@ -353,14 +404,16 @@ const NuovaVisita = () => {
     }, 10000);
 
     try {
-      if (!(window as any).google?.accounts?.oauth2) {
+      const win = window as typeof window & { google?: { accounts?: { oauth2?: { initTokenClient?: (config: { client_id: string; scope: string; callback: (response: { error?: string; error_description?: string; access_token?: string }) => void }) => unknown } } } };
+      
+      if (!win.google?.accounts?.oauth2) {
         throw new Error("Google API non caricata correttamente.");
       }
 
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
+      const client = win.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        callback: async (response: any) => {
+        callback: async (response: { error?: string; error_description?: string; access_token?: string }) => {
           clearTimeout(timeoutId);
           if (response.error) {
             console.error("OAuth Error:", response.error);
@@ -398,20 +451,22 @@ const NuovaVisita = () => {
               } else {
                 alert(`Nessuna comunicazione trovata da: ${workerData.email}`);
               }
-            } catch (fetchErr: any) {
-              console.error("Gmail Fetch Error:", fetchErr);
-              alert(`Errore durante il recupero delle mail: ${fetchErr.message}`);
+            } catch (fetchErr: unknown) {
+              const err = fetchErr as Error;
+              console.error("Gmail Fetch Error:", err);
+              alert(`Errore durante il recupero delle mail: ${err.message}`);
             }
           }
           setLoadingGmail(false);
         },
       });
       client.requestAccessToken();
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const err = e as Error;
       clearTimeout(timeoutId);
-      console.error("Gmail Integration Error:", e);
+      console.error("Gmail Integration Error:", err);
       setLoadingGmail(false);
-      alert(`Errore Integrazione Gmail: ${e.message}`);
+      alert(`Errore Integrazione Gmail: ${err.message}`);
     }
   };
 
@@ -640,7 +695,7 @@ const NuovaVisita = () => {
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {Object.entries(anamnesis.patologica_generale).map(([key, value]: [string, any]) => (
+                  {Object.entries(anamnesis.patologica_generale).map(([key, value]) => (
                     <div key={key} className="bg-white border border-gray-100 p-5 rounded-3xl space-y-3">
                        <p className="text-[10px] font-black text-primary uppercase tracking-widest">{key}</p>
                        <select
@@ -810,7 +865,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={visitForm[field.id as keyof typeof visitForm]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -830,7 +885,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={visitForm[field.id as keyof typeof visitForm]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
