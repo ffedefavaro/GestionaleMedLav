@@ -1,6 +1,5 @@
 import initSqlJs, { type Database } from 'sql.js';
-import { get, del } from 'idb-keyval';
-import { loadEncryptedDB, saveEncryptedDB } from './auth';
+import { get, set } from 'idb-keyval';
 
 let db: Database | null = null;
 
@@ -20,27 +19,20 @@ export const initDB = async () => {
       }
     });
 
-    console.log("Recupero dati cifrati da IndexedDB...");
-    let savedData = await loadEncryptedDB();
-
-    // Legacy recovery: check if unencrypted data exists from previous version
-    if (!savedData) {
-      console.log("Nessun dato cifrato. Ricerca dati legacy...");
-      const legacyData = await get('cartsan_db_v2');
-      if (legacyData) {
-        console.log("DATI LEGACY TROVATI. Migrazione in corso...");
-        savedData = legacyData;
-        await saveEncryptedDB(new Uint8Array(legacyData));
-        await del('cartsan_db_v2');
-      }
+    console.log("Recupero dati da IndexedDB...");
+    let savedData;
+    try {
+      savedData = await get('cartsan_db_v2');
+    } catch (e) {
+      console.error("Errore nel recupero da IndexedDB:", e);
     }
 
     if (savedData) {
-      console.log("Database caricato.");
+      console.log("Database esistente trovato.");
       try {
         db = new SQL.Database(savedData);
       } catch (e) {
-        console.error("Errore nel caricamento. Creazione nuovo...", e);
+        console.error("Errore nel caricamento del database salvato. Creazione nuovo database...", e);
         db = new SQL.Database();
         createTables(db);
       }
@@ -51,8 +43,7 @@ export const initDB = async () => {
     }
 
     if (db) {
-      console.log("Configurazione tabelle e migrazioni...");
-      createTables(db);
+      console.log("Esecuzione migrazioni...");
       runMigrations(db);
       console.log("Salvataggio database...");
       await saveDB();
@@ -70,11 +61,6 @@ export const initDB = async () => {
 
 const createTables = (database: Database) => {
   database.run(`
-    CREATE TABLE IF NOT EXISTS db_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-
     CREATE TABLE IF NOT EXISTS companies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ragione_sociale TEXT NOT NULL,
@@ -246,67 +232,34 @@ const createTables = (database: Database) => {
 
 const runMigrations = (database: Database) => {
   const migrations = [
-    { id: 1, sql: "ALTER TABLE workers ADD COLUMN email TEXT;" },
-    { id: 2, sql: "ALTER TABLE visits ADD COLUMN finalized INTEGER DEFAULT 0;" },
-    { id: 3, sql: "ALTER TABLE protocols ADD COLUMN homogeneous_group TEXT;" },
-    { id: 4, sql: "ALTER TABLE protocols ADD COLUMN risks TEXT;" },
-    { id: 5, sql: "ALTER TABLE protocols ADD COLUMN is_customizable INTEGER DEFAULT 1;" },
-    { id: 6, sql: "ALTER TABLE workers ADD COLUMN protocol_id INTEGER;" },
-    { id: 7, sql: "ALTER TABLE workers ADD COLUMN is_protocol_customized INTEGER DEFAULT 0;" },
-    { id: 8, sql: "ALTER TABLE workers ADD COLUMN custom_protocol TEXT;" },
-    { id: 9, sql: "ALTER TABLE workers ADD COLUMN protocol_override_reason TEXT;" },
-    { id: 10, sql: "ALTER TABLE visits ADD COLUMN accertamenti_effettuati TEXT;" },
-    { id: 11, sql: "CREATE TABLE IF NOT EXISTS training_records (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, corso TEXT NOT NULL, data_completamento DATE, scadenza DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));" },
-    { id: 12, sql: "CREATE TABLE IF NOT EXISTS ppe_assigned (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, dispositivo TEXT NOT NULL, data_consegna DATE, scadenza_sostituzione DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));" },
-    { id: 13, sql: "ALTER TABLE biometrics ADD COLUMN spo2 INTEGER;" },
-    { id: 14, sql: "ALTER TABLE visits ADD COLUMN eo_cardiaca TEXT;" },
-    { id: 15, sql: "ALTER TABLE visits ADD COLUMN eo_respiratoria TEXT;" },
-    { id: 16, sql: "ALTER TABLE visits ADD COLUMN eo_cervicale TEXT;" },
-    { id: 17, sql: "ALTER TABLE visits ADD COLUMN eo_dorsolombare TEXT;" },
-    { id: 18, sql: "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;" },
-    { id: 19, sql: "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;" },
-    { id: 20, sql: "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;" },
-    { id: 21, sql: "ALTER TABLE visits ADD COLUMN eo_altro TEXT;" },
-    { id: 22, sql: "ALTER TABLE visits ADD COLUMN structured_anamnesis TEXT;" },
-    { id: 23, sql: "ALTER TABLE workers ADD COLUMN permanent_anamnesis TEXT;" },
-    { id: 24, sql: "ALTER TABLE visits ADD COLUMN periodicita TEXT;" },
-    { id: 25, sql: "ALTER TABLE visits ADD COLUMN sorveglianza_dati TEXT;" },
-    { id: 26, sql: "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;" },
-    { id: 27, sql: "ALTER TABLE visits ADD COLUMN eventi_sanitari TEXT;" },
-    { id: 28, sql: "ALTER TABLE visits ADD COLUMN esame_obiettivo_strutturato TEXT;" },
-    { id: 29, sql: "ALTER TABLE visits ADD COLUMN valutazione_accertamenti TEXT;" },
-    { id: 30, sql: "ALTER TABLE visits ADD COLUMN trasmissione_dati TEXT;" },
-    { id: 31, sql: "ALTER TABLE visits ADD COLUMN allegato_a TEXT;" },
-    { id: 32, sql: "ALTER TABLE visits ADD COLUMN allegato_b TEXT;" },
-    { id: 33, sql: "ALTER TABLE workers ADD COLUMN nazionalita TEXT;" },
-    { id: 34, sql: "ALTER TABLE workers ADD COLUMN gruppo_sanguigno TEXT;" },
-    { id: 35, sql: "ALTER TABLE workers ADD COLUMN reparto TEXT;" },
-    { id: 36, sql: "ALTER TABLE workers ADD COLUMN qualifica TEXT;" },
-    { id: 37, sql: "ALTER TABLE workers ADD COLUMN data_inizio_mansione DATE;" },
-    { id: 38, sql: "CREATE TABLE IF NOT EXISTS visit_drafts (worker_id INTEGER PRIMARY KEY, data TEXT, last_updated DATETIME DEFAULT CURRENT_TIMESTAMP);" },
-    { id: 39, sql: "ALTER TABLE workers ADD COLUMN domicilio TEXT;" },
-    { id: 40, sql: "ALTER TABLE workers ADD COLUMN telefono TEXT;" }
+    "ALTER TABLE workers ADD COLUMN email TEXT;",
+    "ALTER TABLE visits ADD COLUMN finalized INTEGER DEFAULT 0;",
+    "ALTER TABLE protocols ADD COLUMN homogeneous_group TEXT;",
+    "ALTER TABLE protocols ADD COLUMN risks TEXT;",
+    "ALTER TABLE protocols ADD COLUMN is_customizable INTEGER DEFAULT 1;",
+    "ALTER TABLE workers ADD COLUMN protocol_id INTEGER;",
+    "ALTER TABLE workers ADD COLUMN is_protocol_customized INTEGER DEFAULT 0;",
+    "ALTER TABLE workers ADD COLUMN custom_protocol TEXT;",
+    "ALTER TABLE workers ADD COLUMN protocol_override_reason TEXT;",
+    "ALTER TABLE visits ADD COLUMN accertamenti_effettuati TEXT;",
+    "CREATE TABLE IF NOT EXISTS training_records (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, corso TEXT NOT NULL, data_completamento DATE, scadenza DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));",
+    "CREATE TABLE IF NOT EXISTS ppe_assigned (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, dispositivo TEXT NOT NULL, data_consegna DATE, scadenza_sostituzione DATE, FOREIGN KEY (worker_id) REFERENCES workers(id));",
+    "ALTER TABLE biometrics ADD COLUMN spo2 INTEGER;",
+    "ALTER TABLE visits ADD COLUMN eo_cardiaca TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_respiratoria TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_cervicale TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_dorsolombare TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;",
+    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;"
   ];
 
-  let currentVersion = 0;
-  try {
-    const result = database.exec("SELECT value FROM db_meta WHERE key = 'schema_version'");
-    if (result.length > 0) {
-      currentVersion = parseInt(result[0].values[0][0] as string);
-    }
-  } catch (e) {
-    // meta table might not exist yet
-  }
-
   migrations.forEach(m => {
-    if (m.id > currentVersion) {
-      try {
-        console.log(`Esecuzione migrazione #${m.id}...`);
-        database.run(m.sql);
-        database.run("INSERT OR REPLACE INTO db_meta (key, value) VALUES ('schema_version', ?)", [m.id.toString()]);
-      } catch (e) {
-        console.warn(`Errore migrazione #${m.id} (potrebbe già esistere):`, e);
-      }
+    try {
+      database.run(m);
+    } catch (e) {
+      // Expected if column already exists
     }
   });
 };
@@ -314,18 +267,7 @@ const runMigrations = (database: Database) => {
 export const saveDB = async () => {
   if (!db) return;
   const data = db.export();
-  await saveEncryptedDB(data);
-
-  // Emergency Mirroring: Save critical worker data to localStorage as JSON
-  // Limited to 5MB, but should fit thousands of basic worker records
-  try {
-    const criticalData = db.exec("SELECT id, nome, cognome, codice_fiscale, mansione FROM workers");
-    if (criticalData.length > 0) {
-      localStorage.setItem('emergency_worker_mirror', JSON.stringify(criticalData[0].values));
-    }
-  } catch (e) {
-    console.warn("Emergency mirroring failed (likely storage limit):", e);
-  }
+  await set('cartsan_db_v2', data);
 };
 
 export const getDB = () => db;

@@ -10,12 +10,8 @@ const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () 
   useEffect(() => {
     const w = executeQuery("SELECT * FROM workers WHERE id = ?", [workerId])[0];
     const v = executeQuery("SELECT * FROM visits WHERE worker_id = ? ORDER BY data_visita DESC", [workerId]);
-
     setWorker(w);
-    setVisits(v.map(visit => ({
-      ...visit,
-      anamnesis_parsed: visit.structured_anamnesis ? JSON.parse(visit.structured_anamnesis) : null
-    })));
+    setVisits(v);
   }, [workerId]);
 
   const reprintGiudizio = (visit: any) => {
@@ -118,34 +114,11 @@ const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () 
                        <span className="text-xs font-bold text-gray-500">Scadenza: {v.scadenza_prossima}</span>
                     </div>
                   </div>
-                  <div className="md:col-span-2 space-y-4">
-                    <p className="text-gray-400 font-black text-[10px] uppercase tracking-widest">Sintesi Anamnestica</p>
-                    {v.anamnesis_parsed ? (
-                      <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 space-y-4">
-                        <div className="flex flex-wrap gap-2">
-                           <span className="bg-white px-2 py-1 rounded-lg border border-gray-100 text-[9px] font-black uppercase text-primary">
-                             Fumo: {v.anamnesis_parsed.abitudini.fumo.status}
-                           </span>
-                           <span className="bg-white px-2 py-1 rounded-lg border border-gray-100 text-[9px] font-black uppercase text-primary">
-                             Alcol: {v.anamnesis_parsed.abitudini.alcol}
-                           </span>
-                           {v.anamnesis_parsed.patologica_lavorativa.infortuni.status === 'si' && (
-                             <span className="bg-accent/5 text-accent px-2 py-1 rounded-lg border border-accent/10 text-[9px] font-black uppercase">
-                               Infortuni: SÌ
-                             </span>
-                           )}
-                        </div>
-                        <div className="text-[10px] font-bold text-gray-500 italic">
-                          {v.anamnesis_parsed.storia_lavorativa.length > 0 ? (
-                            `Ultima mansione: ${v.anamnesis_parsed.storia_lavorativa[v.anamnesis_parsed.storia_lavorativa.length - 1].mansione}`
-                          ) : 'Nessuna storia lavorativa registrata.'}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-sm font-medium text-gray-400 leading-relaxed bg-gray-50/50 p-6 rounded-2xl italic border border-gray-100">
-                        "Nessun dato anamnestico strutturato disponibile per questa visita."
-                      </div>
-                    )}
+                  <div className="md:col-span-2">
+                    <p className="text-gray-400 font-black text-[10px] uppercase tracking-widest mb-3">Sintesi Anamnestica ed Obiettiva</p>
+                    <div className="text-sm font-medium text-gray-600 leading-relaxed bg-gray-50/50 p-6 rounded-2xl italic border border-gray-100">
+                      "{v.esame_obiettivo || 'Risultanze regolari, anamnesi negativa per patologie professionali.'}"
+                    </div>
                   </div>
                 </div>
               </div>

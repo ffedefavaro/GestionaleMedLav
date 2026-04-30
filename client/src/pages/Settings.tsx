@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, ShieldCheck } from 'lucide-react';
+import { executeQuery, runCommand, getDB } from '../lib/db';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
 
 const Settings = () => {
@@ -58,18 +58,15 @@ const Settings = () => {
     alert("Profilo Medico salvato!");
   };
 
-  const handleExportDB = async () => {
-    const { get } = await import('idb-keyval');
-    const encrypted = await get('cartsan_db_encrypted');
-    if (!encrypted) {
-      alert("Nessun database cifrato trovato per l'esportazione.");
-      return;
-    }
-    const blob = new Blob([encrypted], { type: 'text/plain' });
+  const handleExportDB = () => {
+    const db = getDB();
+    if (!db) return;
+    const data = db.export();
+    const blob = new Blob([new Uint8Array(data)], { type: 'application/x-sqlite3' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cartsan_backup_encrypted_${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `cartsan_backup_${new Date().toISOString().split('T')[0]}.sqlite`;
     a.click();
   };
 
@@ -79,28 +76,17 @@ const Settings = () => {
 
     const reader = new FileReader();
     reader.onload = async function() {
-      const encryptedData = this.result as string;
-      const { set } = await import('idb-keyval');
-      await set('cartsan_db_encrypted', encryptedData);
-      alert("Database importato con successo. L'app verrà riavviata.");
+      const uint8Array = new Uint8Array(this.result as ArrayBuffer);
+      await set('cartsan_db_v2', uint8Array);
       window.location.reload();
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const clearDB = async () => {
-    const confirmation = prompt("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Digita 'CANCELLA' per procedere:");
-    if (confirmation === 'CANCELLA') {
-      localStorage.clear();
-      await Promise.all([
-        del('cartsan_db_v2'),
-        del('cartsan_db_encrypted'),
-        del('user_password_hash'),
-        del('last_app_version')
-      ]);
+    if (confirm("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Procedere?")) {
+      await del('cartsan_db_v2');
       window.location.reload();
-    } else if (confirmation !== null) {
-      alert("Operazione annullata. La parola di conferma non è corretta.");
     }
   };
 
@@ -262,23 +248,13 @@ const Settings = () => {
                 </button>
 
                 <label className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-5 rounded-2xl border border-white/10 transition-all group cursor-pointer">
-                  <span className="font-bold text-sm">Importa Backup (.txt)</span>
+                  <span className="font-bold text-sm">Importa Database</span>
                   <Upload size={18} className="text-tealAction group-hover:scale-110 transition-transform" />
-                  <input type="file" className="hidden" accept=".txt" onChange={handleImportDB} />
+                  <input type="file" className="hidden" accept=".sqlite" onChange={handleImportDB} />
                 </label>
               </div>
 
               <div className="mt-12 flex flex-col gap-4">
-                <a
-                  href="https://github.com/your-repo/docs/PRIVACY_POLICY.md"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-4 bg-white/5 hover:bg-white/10 rounded-2xl flex items-center gap-3 transition-colors group"
-                >
-                  <ShieldCheck size={18} className="text-accent group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">Informativa Privacy Completa</span>
-                </a>
-
                 <div className="p-4 bg-white/5 rounded-2xl flex items-center gap-3">
                   <BadgeCheck size={18} className="text-tealAction" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Persistent Storage OK</span>

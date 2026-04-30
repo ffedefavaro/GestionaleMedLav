@@ -24,16 +24,7 @@ const Lavoratori = () => {
     codice_fiscale: '',
     email: '',
     data_nascita: '',
-    luogo_nascita: '',
-    nazionalita: '',
-    sesso: 'M',
-    gruppo_sanguigno: '',
-    domicilio: '',
-    telefono: '',
-    reparto: '',
-    qualifica: '',
     data_assunzione: '',
-    data_inizio_mansione: '',
     protocol_id: '',
     is_protocol_customized: 0,
     custom_protocol: [] as any[],
@@ -124,14 +115,13 @@ const Lavoratori = () => {
 
     const params = [
       formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale,
-      formData.email, formData.data_nascita, formData.luogo_nascita, formData.nazionalita,
-      formData.sesso, formData.gruppo_sanguigno, formData.domicilio, formData.telefono,
-      formData.reparto, formData.qualifica, formData.data_assunzione, formData.data_inizio_mansione,
+      formData.email, formData.data_nascita, formData.data_assunzione,
       formData.protocol_id, formData.is_protocol_customized,
       JSON.stringify(formData.custom_protocol), formData.protocol_override_reason
     ];
 
     if (editingId) {
+      // Logic for history if protocol changed
       const old = lavoratori.find(l => l.id === editingId);
       if (old && (old.protocol_id?.toString() !== formData.protocol_id || old.is_protocol_customized !== formData.is_protocol_customized)) {
         await runCommand(
@@ -143,9 +133,7 @@ const Lavoratori = () => {
       await runCommand(
         `UPDATE workers SET
           company_id = ?, nome = ?, cognome = ?, codice_fiscale = ?,
-          email = ?, data_nascita = ?, luogo_nascita = ?, nazionalita = ?,
-          sesso = ?, gruppo_sanguigno = ?, domicilio = ?, telefono = ?,
-          reparto = ?, qualifica = ?, data_assunzione = ?, data_inizio_mansione = ?,
+          email = ?, data_nascita = ?, data_assunzione = ?,
           protocol_id = ?, is_protocol_customized = ?,
           custom_protocol = ?, protocol_override_reason = ?
         WHERE id = ?`,
@@ -155,10 +143,9 @@ const Lavoratori = () => {
       await runCommand(
         `INSERT INTO workers (
           company_id, nome, cognome, codice_fiscale, email, data_nascita,
-          luogo_nascita, nazionalita, sesso, gruppo_sanguigno, domicilio,
-          telefono, reparto, qualifica, data_assunzione, data_inizio_mansione,
-          protocol_id, is_protocol_customized, custom_protocol, protocol_override_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          data_assunzione, protocol_id, is_protocol_customized,
+          custom_protocol, protocol_override_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     }
@@ -177,16 +164,7 @@ const Lavoratori = () => {
       codice_fiscale: '',
       email: '',
       data_nascita: '',
-      luogo_nascita: '',
-      nazionalita: '',
-      sesso: 'M',
-      gruppo_sanguigno: '',
-      domicilio: '',
-      telefono: '',
-      reparto: '',
-      qualifica: '',
       data_assunzione: '',
-      data_inizio_mansione: '',
       protocol_id: '',
       is_protocol_customized: 0,
       custom_protocol: [],
@@ -202,16 +180,7 @@ const Lavoratori = () => {
       codice_fiscale: l.codice_fiscale,
       email: l.email || '',
       data_nascita: l.data_nascita || '',
-      luogo_nascita: l.luogo_nascita || '',
-      nazionalita: l.nazionalita || '',
-      sesso: l.sesso || 'M',
-      gruppo_sanguigno: l.gruppo_sanguigno || '',
-      domicilio: l.domicilio || '',
-      telefono: l.telefono || '',
-      reparto: l.reparto || '',
-      qualifica: l.qualifica || '',
       data_assunzione: l.data_assunzione || '',
-      data_inizio_mansione: l.data_inizio_mansione || '',
       protocol_id: l.protocol_id ? l.protocol_id.toString() : '',
       is_protocol_customized: l.is_protocol_customized || 0,
       custom_protocol: l.custom_protocol || [],
@@ -287,47 +256,8 @@ const Lavoratori = () => {
                 <input type="email" className="input-standard" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Sesso</label>
-                <select className="input-standard" value={formData.sesso} onChange={e => setFormData({...formData, sesso: e.target.value})}>
-                  <option value="M">M</option>
-                  <option value="F">F</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Luogo Nascita</label>
-                <input className="input-standard" value={formData.luogo_nascita} onChange={e => setFormData({...formData, luogo_nascita: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nazionalità</label>
-                <input className="input-standard" value={formData.nazionalita} onChange={e => setFormData({...formData, nazionalita: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Gruppo Sanguigno</label>
-                <input className="input-standard" value={formData.gruppo_sanguigno} onChange={e => setFormData({...formData, gruppo_sanguigno: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Domicilio</label>
-                <input className="input-standard" value={formData.domicilio} onChange={e => setFormData({...formData, domicilio: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Telefono</label>
-                <input className="input-standard" value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Reparto</label>
-                <input className="input-standard" value={formData.reparto} onChange={e => setFormData({...formData, reparto: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Qualifica</label>
-                <input className="input-standard" value={formData.qualifica} onChange={e => setFormData({...formData, qualifica: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Assunzione</label>
                 <input type="date" className="input-standard" value={formData.data_assunzione} onChange={e => setFormData({...formData, data_assunzione: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Inizio Mansione</label>
-                <input type="date" className="input-standard" value={formData.data_inizio_mansione} onChange={e => setFormData({...formData, data_inizio_mansione: e.target.value})} />
               </div>
             </div>
 

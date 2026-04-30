@@ -9,8 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
-  AlertOctagon,
-  Lock
+  AlertOctagon
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
@@ -32,13 +31,6 @@ const SidebarItem = ({ icon: Icon, label, to, active }: { icon: any, label: stri
 const Sidebar = () => {
   const { isSidebarOpen, toggleSidebar } = useAppStore();
   const location = useLocation();
-
-  const handleLogout = () => {
-    if (confirm("Vuoi bloccare la sessione e tornare al login?")) {
-      sessionStorage.removeItem('isLoggedIn');
-      window.location.reload();
-    }
-  };
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
@@ -80,19 +72,11 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-white/5 space-y-2">
-        <button
-          onClick={handleLogout}
-          className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-all text-red-400 hover:bg-red-500/10 hover:text-red-300`}
-        >
-          <Lock size={18} />
-          {isSidebarOpen && <span className="font-bold text-xs uppercase tracking-widest">Blocca</span>}
-        </button>
-
+      <div className="p-6 border-t border-white/5">
         {isSidebarOpen && (
-          <div className="px-2 pt-2">
-            <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest leading-none">Powered by</p>
-            <p className="text-[10px] font-medium text-gray-300 italic opacity-40 font-sans">Lean Medical Systems</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Powered by</p>
+            <p className="text-xs font-medium text-gray-300 italic opacity-60 font-sans">Lean Medical Systems</p>
           </div>
         )}
       </div>

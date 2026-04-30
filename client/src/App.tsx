@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
-import { initDB, runCommand } from './lib/db';
+import { initDB } from './lib/db';
 import { del } from 'idb-keyval';
-import { checkSession, updateLastActivity } from './lib/auth';
-import { get, set } from 'idb-keyval';
-
-const APP_VERSION = '1.0.2'; // Update to trigger safety backup
 
 // Pages
-import Login from './pages/Login';
 import Aziende from './pages/Aziende';
 import Lavoratori from './pages/Lavoratori';
 import Protocolli from './pages/Protocolli';
@@ -23,97 +18,46 @@ import Dashboard from './pages/Dashboard';
 function App() {
   const [dbReady, setDbReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('isLoggedIn') === 'true');
-  const [showBackupAlert, setShowBackupAlert] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const checkVersionAndBackup = async () => {
-      const lastVersion = await get('last_app_version');
-      if (lastVersion && lastVersion !== APP_VERSION) {
-        setShowBackupAlert(true);
-        // Trigger automatic export of encrypted data
-        const encrypted = await get('cartsan_db_encrypted');
-        if (encrypted) {
-          const blob = new Blob([encrypted], { type: 'text/plain' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `SAFETY_BACKUP_AUTO_${new Date().toISOString().split('T')[0]}.txt`;
-          a.click();
-        }
-      }
-      await set('last_app_version', APP_VERSION);
-    };
-    checkVersionAndBackup();
-
     let isMounted = true;
+
+    // Timeout di fallback di 5 secondi
     const timeoutId = setTimeout(() => {
       if (isMounted && !dbReady && !error) {
-        setError("Il caricamento del database cifrato sta impiegando troppo tempo. Verifica la password.");
+        setError("Il caricamento sta impiegando più tempo del previsto. Verifica la connessione o prova a ricaricare.");
       }
     }, 5000);
 
     initDB()
-      .then(async () => {
+      .then(() => {
         if (isMounted) {
           setDbReady(true);
           clearTimeout(timeoutId);
-          // Log access
-          await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
-            ["LOGIN", "system", `Accesso utente da ${navigator.userAgent}`]);
         }
       })
       .catch((err) => {
         if (isMounted) {
           console.error("App initialization error:", err);
-          setError(`Errore critico nella decifrazione o inizializzazione: ${err.message}`);
+          setError(`Errore critico nell'inizializzazione del database: ${err.message || "Errore sconosciuto"}`);
           clearTimeout(timeoutId);
         }
       });
 
-    const sessionInterval = setInterval(() => {
-      if (!checkSession()) {
-        setIsLoggedIn(false);
-        setDbReady(false);
-      }
-    }, 30000); // Check every 30s
-
-    const activityHandler = () => updateLastActivity();
-    window.addEventListener('mousemove', activityHandler);
-    window.addEventListener('keydown', activityHandler);
-
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
-      clearInterval(sessionInterval);
-      window.removeEventListener('mousemove', activityHandler);
-      window.removeEventListener('keydown', activityHandler);
     };
-  }, [isLoggedIn]);
+  }, []);
 
   const handleReset = () => {
-    const confirmation = prompt("ATTENZIONE: Questa operazione cancellerà TUTTI i dati permanentemente. Digita 'CANCELLA' per confermare:");
-    if (confirmation === 'CANCELLA') {
+    if (confirm("Sei sicuro? Questo cancellerà tutti i dati locali e ripristinerà il database vuoto.")) {
       localStorage.clear();
-      Promise.all([
-        del('cartsan_db_v2'),
-        del('cartsan_db_encrypted'),
-        del('user_password_hash'),
-        del('last_app_version')
-      ]).then(() => {
+      del('cartsan_db_v2').then(() => {
         window.location.reload();
       });
-    } else if (confirmation !== null) {
-      alert("Operazione annullata. La parola di conferma non è corretta.");
     }
   };
-
-
-  if (!isLoggedIn) {
-    return <Login onLogin={() => setIsLoggedIn(true)} />;
-  }
 
   if (error) {
     return (
@@ -164,32 +108,9 @@ function App() {
     );
   }
 
-  const isProduction = window.location.hostname === 'gestionalemedlav.netlify.app';
-
   return (
     <Router>
       <div className="flex h-screen bg-warmWhite overflow-hidden font-sans text-anthracite">
-        {!isProduction && (
-          <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white text-[9px] font-black uppercase tracking-[0.2em] py-1 text-center z-[200]">
-             Attenzione: Sei in un ambiente di sviluppo/test. I dati inseriti qui non sono visibili sul sito principale.
-          </div>
-        )}
-        {showBackupAlert && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 duration-500">
-             <div className="bg-primary text-white px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border border-white/10 backdrop-blur-xl">
-                <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                </div>
-                <div>
-                   <p className="font-black text-xs uppercase tracking-widest">Aggiornamento Rilevato</p>
-                   <p className="text-[10px] font-bold opacity-60">Backup di sicurezza scaricato automaticamente.</p>
-                </div>
-                <button onClick={() => setShowBackupAlert(false)} className="ml-4 p-2 hover:bg-white/10 rounded-xl transition-colors">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
-             </div>
-          </div>
-        )}
         <Sidebar />
         <main className="flex-1 overflow-auto bg-warmWhite relative">
           {/* Glassmorphism Background Accent */}
