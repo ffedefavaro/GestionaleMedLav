@@ -35,21 +35,25 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
   }, []);
 
   useEffect(() => {
-    if (query.length < 2) {
-      setResults([]);
-      return;
-    }
+    const fetchResults = async () => {
+      if (query.length < 2) {
+        setResults([]);
+        return;
+      }
 
-    const searchResults = executeQuery(`
-      SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, companies.ragione_sociale as azienda
-      FROM workers
-      JOIN companies ON workers.company_id = companies.id
-      WHERE workers.nome LIKE ? OR workers.cognome LIKE ? OR companies.ragione_sociale LIKE ?
-      LIMIT 10
-    `, [`%${query}%`, `%${query}%`, `%${query}%`]);
+      const searchResults = executeQuery(`
+        SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, companies.ragione_sociale as azienda
+        FROM workers
+        JOIN companies ON workers.company_id = companies.id
+        WHERE workers.nome LIKE ? OR workers.cognome LIKE ? OR companies.ragione_sociale LIKE ?
+        LIMIT 10
+      `, [`%${query}%`, `%${query}%`, `%${query}%`]);
 
-    setResults(searchResults);
-    setIsOpen(true);
+      setResults(searchResults);
+      setIsOpen(true);
+    };
+
+    fetchResults();
   }, [query]);
 
   const handleSelect = (worker: Worker) => {

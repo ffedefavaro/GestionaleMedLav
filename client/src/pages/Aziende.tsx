@@ -2,8 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { Plus, Search, Edit2, Trash2, Building2, MapPin } from 'lucide-react';
 
+interface Company {
+  id: number;
+  ragione_sociale: string;
+  p_iva?: string;
+  ateco?: string;
+  sede_operativa?: string;
+  referente?: string;
+  rspp?: string;
+  rls?: string;
+}
+
 const Aziende = () => {
-  const [aziende, setAziende] = useState<any[]>([]);
+  const [aziende, setAziende] = useState<Company[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
@@ -18,11 +29,14 @@ const Aziende = () => {
 
   const fetchAziende = () => {
     const data = executeQuery("SELECT * FROM companies ORDER BY ragione_sociale ASC");
-    setAziende(data);
+    setAziende(data as Company[]);
   };
 
   useEffect(() => {
-    fetchAziende();
+    const loadData = async () => {
+      fetchAziende();
+    };
+    loadData();
   }, []);
 
   const handleDelete = async (id: number, name: string) => {
@@ -34,7 +48,7 @@ const Aziende = () => {
     }
   };
 
-  const handleEdit = (azienda: any) => {
+  const handleEdit = (azienda: Company) => {
     setFormData({
       ragione_sociale: azienda.ragione_sociale,
       p_iva: azienda.p_iva || '',

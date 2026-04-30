@@ -20,7 +20,7 @@ export const setEncryptionKey = (password: string) => {
 export const encryptData = (data: Uint8Array): string => {
   if (!encryptionKey) throw new Error("Encryption key not set");
   // Convert Uint8Array to WordArray for CryptoJS
-  const wordArray = CryptoJS.lib.WordArray.create(data as any);
+  const wordArray = CryptoJS.lib.WordArray.create(data);
   return CryptoJS.AES.encrypt(wordArray, encryptionKey).toString();
 };
 
