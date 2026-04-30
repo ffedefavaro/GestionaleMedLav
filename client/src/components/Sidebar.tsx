@@ -5,17 +5,24 @@ import {
   Stethoscope,
   Calendar,
   Settings,
-  ClipboardList,
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
   AlertOctagon,
-  Lock
+  Lock,
+  type LucideIcon
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 
-const SidebarItem = ({ icon: Icon, label, to, active }: { icon: any, label: string, to: string, active: boolean }) => (
+interface SidebarItemProps {
+  icon: LucideIcon;
+  label: string;
+  to: string;
+  active: boolean;
+}
+
+const SidebarItem = ({ icon: Icon, label, to, active }: SidebarItemProps) => (
   <Link
     to={to}
     className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${

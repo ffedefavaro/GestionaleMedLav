@@ -11,24 +11,31 @@ export const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<stri
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item: any) => item.str).join(' ');
+    const pageText = textContent.items.map((item) => 'str' in item ? item.str : '').join(' ');
     fullText += pageText + '\n';
   }
 
   return fullText;
 };
 
-export const fetchGmailAttachments = async (accessToken: string, messageId: string): Promise<any[]> => {
+interface GmailAttachment {
+  filename: string;
+  mimeType: string;
+  data: Uint8Array;
+  extractedText: string;
+}
+
+export const fetchGmailAttachments = async (accessToken: string, messageId: string): Promise<GmailAttachment[]> => {
   const response = await fetch(`https://gmail.googleapis.com/v1/users/me/messages/${messageId}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-  const detail = await response.json();
+  const detail = await response.json() as { payload?: { parts?: Array<{ filename: string; mimeType: string; body?: { attachmentId: string } }> } };
 
-  if (!detail.payload.parts) return [];
+  if (!detail.payload?.parts) return [];
 
-  const attachmentParts = detail.payload.parts.filter((p: any) => p.filename && p.body.attachmentId);
+  const attachmentParts = detail.payload.parts.filter((p) => p.filename && p.body?.attachmentId);
 
-  const attachments = await Promise.all(attachmentParts.map(async (part: any) => {
+  const attachments = await Promise.all(attachmentParts.map(async (part) => {
     const attachRes = await fetch(
       `https://gmail.googleapis.com/v1/users/me/messages/${messageId}/attachments/${part.body.attachmentId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
