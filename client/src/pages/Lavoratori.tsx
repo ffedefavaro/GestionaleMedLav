@@ -7,11 +7,47 @@ import {
 } from 'lucide-react';
 import StoricoLavoratore from './StoricoLavoratore';
 
+interface Worker {
+  id: number;
+  company_id: number;
+  nome: string;
+  cognome: string;
+  codice_fiscale: string;
+  email?: string;
+  data_nascita?: string;
+  data_assunzione?: string;
+  protocol_id?: number;
+  is_protocol_customized: number;
+  custom_protocol: Exam[];
+  protocol_override_reason?: string;
+  azienda?: string;
+  protocol_name?: string;
+}
+
+interface Exam {
+  id?: number;
+  name: string;
+  type?: string;
+  [key: string]: any;
+}
+
+interface Company {
+  id: number;
+  ragione_sociale: string;
+}
+
+interface Protocol {
+  id: number;
+  company_id: number;
+  mansione: string;
+  esami: Exam[];
+}
+
 const Lavoratori = () => {
-  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedForHistory, setSelectedForHistory] = useState<number | null>(null);
-  const [aziende, setAziende] = useState<any[]>([]);
-  const [protocolli, setProtocolli] = useState<any[]>([]);
+  const [aziende, setAziende] = useState<Company[]>([]);
+  const [protocolli, setProtocolli] = useState<Protocol[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,11 +63,11 @@ const Lavoratori = () => {
     data_assunzione: '',
     protocol_id: '',
     is_protocol_customized: 0,
-    custom_protocol: [] as any[],
+    custom_protocol: [] as Exam[],
     protocol_override_reason: ''
   });
 
-  const fetchData = () => {
+  useEffect(() => {
     const l = executeQuery(`
       SELECT
         workers.*,
@@ -54,10 +90,6 @@ const Lavoratori = () => {
       ...item,
       esami: JSON.parse(item.esami || '[]')
     })));
-  };
-
-  useEffect(() => {
-    fetchData();
   }, []);
 
   const handleProtocolChange = (protocolId: string) => {
@@ -81,7 +113,7 @@ const Lavoratori = () => {
     }
   };
 
-  const toggleExamCustomization = (index: number, field: string, value: any) => {
+  const toggleExamCustomization = (index: number, field: string, value: unknown) => {
     const newProtocol = [...formData.custom_protocol];
     newProtocol[index] = { ...newProtocol[index], [field]: value };
     setFormData({
@@ -172,7 +204,7 @@ const Lavoratori = () => {
     });
   };
 
-  const handleEdit = (l: any) => {
+  const handleEdit = (l: Worker) => {
     setFormData({
       company_id: l.company_id.toString(),
       nome: l.nome,

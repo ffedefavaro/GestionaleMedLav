@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react';
 import { executeQuery } from '../lib/db';
-import { Building2, Users, Stethoscope, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Building2, Users, Stethoscope, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+interface DashboardStats {
+  aziende: number;
+  scadenzeImminenti: number;
+  visiteOggi: number;
+  idoneitaScadenza: number;
+}
+
 const Dashboard = () => {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     aziende: 0,
-    scadenzeImminenti: 0, // 7 days
+    scadenzeImminenti: 0,
     visiteOggi: 0,
-    idoneitaScadenza: 0 // 30 days
+    idoneitaScadenza: 0
   });
 
   useEffect(() => {
@@ -131,7 +138,7 @@ const Dashboard = () => {
   );
 };
 
-const StatCard = ({ icon, label, value, trend, highlight, warning }: { icon: any, label: string, value: number, trend?: string, highlight?: boolean, warning?: boolean }) => (
+const StatCard = ({ icon, label, value, trend, highlight, warning }: { icon: LucideIcon, label: string, value: number, trend?: string, highlight?: boolean, warning?: boolean }) => (
   <div className={`group bg-white p-7 rounded-[32px] border border-white shadow-lg shadow-primary/5 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden ${highlight ? 'ring-2 ring-tealAction/20' : ''}`}>
     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 ${warning ? 'bg-accent/10 text-accent' : highlight ? 'bg-tealAction/10 text-tealAction' : 'bg-primary/5 text-primary'}`}>
       {icon}
