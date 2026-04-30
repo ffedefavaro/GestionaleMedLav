@@ -1,0 +1,8 @@
+
+> client@0.0.0 preview
+> vite preview --port 5176
+
+Port 5176 is in use, trying another one...
+Port 5177 is in use, trying another one...
+  ➜  Local:   http://localhost:5178/
+  ➜  Network: use --host to expose

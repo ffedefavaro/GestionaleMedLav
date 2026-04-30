@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import {
   Activity, CheckCircle, Download,
-  Heart, Stethoscope, Shield, User as UserIcon,
-  PenTool, FileText, ChevronRight, ChevronLeft, AlertCircle, Clock, MapPin, Phone, Briefcase, Calendar
+  Heart, Wind, Stethoscope, Shield, User as UserIcon,
+  PenTool, FileText, ChevronRight, ChevronLeft, AlertCircle, Clock, MapPin, Phone, Droplets, Briefcase, Calendar
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import WorkerSearch from '../components/WorkerSearch';
@@ -13,8 +13,8 @@ import { SignatureInput } from '../components/visita/SignatureInput';
 const INITIAL_VISIT_STATE = {
   sezione1: {
     data_visita: new Date().toISOString().split('T')[0],
-    periodicita: 'Annuale',
-    tipo_visita: 'Periodica'
+    periodicita: 'Annuale', // Annuale / Biennale / Straordinaria / Su richiesta
+    tipo_visita: 'Periodica' // Preventiva / Periodica / Su richiesta / Cambio mansione / Ripresa lavoro / A richiesta lavoratore
   },
   sezione5: { // Programma Sorveglianza
     rischi: {
@@ -30,8 +30,7 @@ const INITIAL_VISIT_STATE = {
       lab: [] as string[],
       strumentali: { spirometria: false, audiometria: false },
       tossicologici: false,
-      allegato_rachide: false,
-      allegato_epm: false
+      allegato_rachide: false
     }
   },
   sezione6: { // Anamnesi
@@ -69,7 +68,7 @@ const INITIAL_VISIT_STATE = {
   sezione10: { // Valutazione Accertamenti
     lab: [] as { id: number, esame: string, esito: 'Nei limiti' | 'Alterato', note: string }[],
     toss: [] as { id: number, marcatore: string, esito: string, note: string }[],
-    spiro: { stato: 'Normale', note: '' },
+    spiro: { stato: 'Normale', note: '' }, // Normale / Alterata lieve / moderata / grave
     audio: { nota: '', rif_allegato: '' },
     questionari: ''
   },
@@ -81,7 +80,11 @@ const INITIAL_VISIT_STATE = {
     prescrizioni: '',
     data_nuova_visita: ''
   },
-  sezione12: { data_lavoratore: new Date().toISOString().split('T')[0], data_datore: new Date().toISOString().split('T')[0], metodo: 'Email' },
+  sezione12: {
+    data_lavoratore: new Date().toISOString().split('T')[0],
+    data_datore: new Date().toISOString().split('T')[0],
+    metodo: 'Email' // Email / PEC / Consegna a mano / Altro
+  },
   sezione13: { firma_medico: '', conformita_elettronica: true, n_allegati: 0 },
   allegatoA: { // Rachide
     lordosi_c: 'Normale', lordosi_l: 'Normale', cifosi: 'Normale', scoliosi: false,
@@ -130,6 +133,7 @@ const NuovaVisita = () => {
       const company = executeQuery("SELECT * FROM companies WHERE id = ?", [worker.company_id])[0];
       setCompanyData(company);
 
+      // Auto-set from protocol
       const prot = executeQuery(`
         SELECT protocols.* FROM protocols
         JOIN workers ON workers.protocol_id = protocols.id
@@ -158,6 +162,7 @@ const NuovaVisita = () => {
 
   const handleSave = async () => {
     if (!selectedWorkerId) return;
+
     await runCommand(`
       INSERT INTO visits (
         worker_id, data_visita, tipo_visita, periodicita,
@@ -175,7 +180,7 @@ const NuovaVisita = () => {
     ]);
 
     generatePDF();
-    alert("Cartella Sanitaria archiviata con successo.");
+    alert("Cartella Sanitaria Art. 41 archiviata con successo.");
     setStep(1);
     setSelectedWorkerId('');
     setVisitData(INITIAL_VISIT_STATE);
@@ -185,26 +190,38 @@ const NuovaVisita = () => {
     const doc = new jsPDF();
     const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
 
-    const addHeader = (title: string) => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text(title, 105, 15, { align: 'center' });
-      doc.setFontSize(8);
-      doc.text("(Art. 41 D.Lgs. 81/08 - Allegato 3A)", 105, 20, { align: 'center' });
-      doc.line(15, 22, 195, 22);
-    };
+    doc.setFont("helvetica", "bold");
+    doc.text("CARTELLA SANITARIA E DI RISCHIO (ART. 41 D.LGS. 81/08)", 105, 15, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text("(Allegato 3A - D.Lgs. 81/08 e s.m.i.)", 105, 20, { align: 'center' });
 
-    addHeader("CARTELLA SANITARIA E DI RISCHIO");
     doc.setFontSize(10);
-    doc.text(`Lavoratore: ${workerData?.cognome} ${workerData?.nome}`, 20, 35);
-    doc.text(`Azienda: ${companyData?.ragione_sociale}`, 20, 42);
-    doc.text(`Giudizio: ${visitData.sezione11.giudizio.toUpperCase()}`, 20, 55);
+    doc.text("SEZIONI 1-4: DATI GENERALI ED ANAGRAFICI", 15, 30);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`Data Visita: ${visitData.sezione1.data_visita} | Tipo: ${visitData.sezione1.tipo_visita}`, 20, 36);
+    doc.text(`Azienda: ${companyData?.ragione_sociale || ''} - Unità: ${companyData?.sede_operativa || ''}`, 20, 41);
+    doc.text(`Lavoratore: ${workerData?.cognome} ${workerData?.nome} | CF: ${workerData?.codice_fiscale}`, 20, 46);
+    doc.text(`Mansione: ${workerData?.mansione} | Assunzione: ${workerData?.data_assunzione}`, 20, 51);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("SEZIONE 11: GIUDIZIO DI IDONEITÀ", 15, 70);
+    doc.setFontSize(14);
+    doc.text(visitData.sezione11.giudizio.toUpperCase(), 20, 80);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    if (visitData.sezione11.prescrizioni) {
+      doc.text(`Prescrizioni/Limitazioni: ${visitData.sezione11.prescrizioni}`, 20, 90, { maxWidth: 170 });
+    }
 
     if (visitData.sezione13.firma_medico) {
       doc.addImage(visitData.sezione13.firma_medico, 'PNG', 130, 240, 50, 20);
     }
     doc.text(`Dott. ${doctorData.nome || ''}`, 130, 265);
-    doc.save(`CSR_${workerData?.cognome}_${visitData.sezione1.data_visita}.pdf`);
+    doc.text(`N. Iscr. ${doctorData.n_iscrizione || ''}`, 130, 270);
+
+    doc.save(`CSR_ART41_${workerData?.cognome}_${visitData.sezione1.data_visita}.pdf`);
   };
 
   const SectionTitle = ({ num, title, icon: Icon }: { num: string, title: string, icon: any }) => (
@@ -216,16 +233,17 @@ const NuovaVisita = () => {
   );
 
   return (
-    <div className="p-10 max-w-7xl mx-auto pb-40">
+    <div className="p-10 max-w-7xl mx-auto pb-40 font-sans">
       <div className="mb-12 text-center">
-        <h1 className="text-4xl font-black text-primary tracking-tighter uppercase italic">Nuova Cartella Sanitaria</h1>
+        <h1 className="text-4xl font-black text-primary tracking-tighter uppercase italic">Cartella Sanitaria e di Rischio</h1>
         <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">D.Lgs. 81/08 Art. 41 - Allegato 3A</p>
       </div>
 
+      {/* STEP 1: INITIAL SELECTION & ANAGRAFICA */}
       {step === 1 && (
         <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
            <div className="glass-card p-10 rounded-[40px] shadow-2xl">
-              <SectionTitle num="1-4" title="Inquadramento e Anagrafica" icon={UserIcon} />
+              <SectionTitle num="1-4" title="Dati Visita ed Anagrafica" icon={UserIcon} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                  <div className="space-y-6">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Ricerca Lavoratore</label>
@@ -244,7 +262,7 @@ const NuovaVisita = () => {
                        <div className="space-y-1">
                           <label className="text-[9px] font-bold text-gray-400 uppercase">Tipologia</label>
                           <select className="input-standard !py-2 text-xs font-black" value={visitData.sezione1.tipo_visita} onChange={e => setVisitData({...visitData, sezione1: {...visitData.sezione1, tipo_visita: e.target.value}})}>
-                             <option>Periodica</option><option>Preventiva</option><option>Su richiesta</option><option>Cambio mansione</option><option>Ripresa lavoro</option>
+                             <option>Periodica</option><option>Preventiva</option><option>Su richiesta</option><option>Cambio mansione</option><option>Ripresa lavoro</option><option>A richiesta lavoratore</option>
                           </select>
                        </div>
                     </div>
@@ -260,12 +278,24 @@ const NuovaVisita = () => {
                            </div>
                          </div>
                          <p className="text-3xl font-black text-primary tracking-tighter leading-none">{workerData.cognome} {workerData.nome}</p>
-                         <p className="text-xs font-bold text-gray-500 mt-2 uppercase tracking-widest">{workerData.codice_fiscale} | {calculateAge(workerData.data_nascita)} ANNI</p>
+                         <p className="text-xs font-bold text-gray-500 mt-2">{workerData.codice_fiscale} | {calculateAge(workerData.data_nascita)} ANNI</p>
                          <div className="grid grid-cols-2 gap-4 mt-8 pt-8 border-t border-tealAction/10">
-                            <div className="flex items-center gap-2 text-primary font-bold text-[10px] uppercase tracking-tighter"><Briefcase size={14}/> {workerData.mansione}</div>
-                            <div className="flex items-center gap-2 text-primary font-bold text-[10px] uppercase tracking-tighter"><MapPin size={14}/> {workerData.domicilio || 'N/D'}</div>
-                            <div className="flex items-center gap-2 text-primary font-bold text-[10px] uppercase tracking-tighter"><Calendar size={14}/> {workerData.data_assunzione}</div>
-                            <div className="flex items-center gap-2 text-primary font-bold text-[10px] uppercase tracking-tighter"><Phone size={14}/> {workerData.telefono || 'N/D'}</div>
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-tealAction uppercase opacity-60">Mansione</p>
+                               <p className="text-xs font-black text-primary truncate flex items-center gap-2"><Briefcase size={12}/> {workerData.mansione}</p>
+                            </div>
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-tealAction uppercase opacity-60">Domicilio</p>
+                               <p className="text-xs font-black text-primary truncate flex items-center gap-2"><MapPin size={12}/> {workerData.domicilio || 'N.D.'}</p>
+                            </div>
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-tealAction uppercase opacity-60">Data Assunzione</p>
+                               <p className="text-xs font-black text-primary truncate flex items-center gap-2"><Calendar size={12}/> {workerData.data_assunzione}</p>
+                            </div>
+                            <div className="space-y-1">
+                               <p className="text-[9px] font-black text-tealAction uppercase opacity-60">Telefono</p>
+                               <p className="text-xs font-black text-primary truncate flex items-center gap-2"><Phone size={12}/> {workerData.telefono || 'N.D.'}</p>
+                            </div>
                          </div>
                       </div>
                       <div className="absolute -right-12 -bottom-12 opacity-5 text-tealAction"><UserIcon size={240} /></div>
@@ -273,7 +303,7 @@ const NuovaVisita = () => {
                  ) : (
                    <div className="bg-gray-50 border-2 border-dashed border-gray-100 rounded-[40px] flex flex-col items-center justify-center p-12 text-gray-200">
                       <UserIcon size={64} strokeWidth={1} />
-                      <p className="text-[10px] font-black uppercase mt-4 tracking-widest leading-relaxed text-center">Identificare il lavoratore<br/>per sbloccare la cartella</p>
+                      <p className="text-[10px] font-black uppercase mt-4 tracking-widest text-center leading-relaxed">Identificare il lavoratore<br/>per avviare la cartella sanitaria</p>
                    </div>
                  )}
               </div>
@@ -284,17 +314,17 @@ const NuovaVisita = () => {
         </div>
       )}
 
-      {/* STEP 2: PROGRAMMA SORVEGLIANZA */}
+      {/* STEP 2: SECTION 5 - PROGRAMMA SORVEGLIANZA */}
       {step === 2 && (
         <div className="space-y-12 animate-in fade-in duration-500">
            <div className="glass-card p-10 rounded-[40px] shadow-xl">
               <SectionTitle num="5" title="Programma Sorveglianza Sanitaria" icon={Shield} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                  <div className="space-y-4">
-                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-6 border-b border-gray-50 pb-2">Rischi Lavorativi ed Indici</p>
+                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-6 border-b border-gray-50 pb-2 flex items-center gap-2"><Activity size={14}/> Fattori di Rischio Obbligatori</p>
                     {[
                       { id: 'mmc', label: 'Movimentazione Carichi', sub: 'Indice NIOSH', k: 'niosh' },
-                      { id: 'rumore', label: 'Rumore', sub: 'LEX 8h dB(A)', k: 'lex8h' },
+                      { id: 'rumore', label: 'Esposizione Rumore', sub: 'LEX 8h dB(A)', k: 'lex8h' },
                       { id: 'vibrazioni', label: 'Vibrazioni M-B', sub: 'A(8) m/s2', k: 'a8' },
                       { id: 'chimico', label: 'Agenti Chimici', sub: 'Sostanze', k: 'sostanze' },
                       { id: 'polveri', label: 'Polveri', sub: 'Dettaglio', k: 'dettaglio' },
@@ -316,7 +346,7 @@ const NuovaVisita = () => {
                     ))}
                  </div>
                  <div className="space-y-8">
-                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-4 border-b border-gray-50 pb-2">Accertamenti Mirati</p>
+                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-4 border-b border-gray-50 pb-2 flex items-center gap-2"><Droplets size={14}/> Accertamenti Mirati</p>
                     <div className="bg-primary/5 p-8 rounded-[40px] space-y-6 shadow-inner">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Analisi Laboratorio Clinico</label>
                        <div className="flex flex-wrap gap-2">
@@ -354,68 +384,115 @@ const NuovaVisita = () => {
         </div>
       )}
 
-      {/* STEP 3: ANAMNESI & EVENTI */}
+      {/* STEP 3: ANAMNESI & EVENTI (SECTIONS 6-7) */}
       {step === 3 && (
         <div className="space-y-12 animate-in fade-in duration-500">
            <div className="glass-card p-10 rounded-[40px] shadow-xl">
               <SectionTitle num="6" title="Anamnesi e Stato Fisiologico" icon={FileText} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                  <div className="space-y-8">
-                    <textarea placeholder="Anamnesi familiare..." className="input-standard h-24" value={visitData.sezione6.familiare} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, familiare: e.target.value}})} />
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Familiare</label>
+                       <textarea placeholder="Patologie ereditarie..." className="input-standard h-24 text-sm font-medium" value={visitData.sezione6.familiare} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, familiare: e.target.value}})} />
+                    </div>
                     <div className="bg-primary/5 p-8 rounded-[40px] space-y-6 shadow-inner border border-primary/5">
-                       <p className="text-[10px] font-black text-primary uppercase border-b border-primary/10 pb-2">Fisiologica</p>
+                       <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] border-b border-primary/10 pb-2">Dati Fisiologici</p>
                        <div className="grid grid-cols-2 gap-6">
-                          <input placeholder="Alvo/Diuresi" className="input-standard !py-2 text-xs" value={visitData.sezione6.fisiologica.alvo_diuresi} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, alvo_diuresi: e.target.value}}})} />
-                          <select className="input-standard !py-2 text-xs" value={visitData.sezione6.fisiologica.alcol} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, alcol: e.target.value}}})}>
-                             <option>Alcol: No</option><option>Alcol: Sì</option>
-                          </select>
-                          <select className="input-standard !py-2 text-xs" value={visitData.sezione6.fisiologica.fumatore.status} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, fumatore: {...visitData.sezione6.fisiologica.fumatore, status: e.target.value}}}})}>
-                             <option>Fumatore: No</option><option>Fumatore: Sì</option>
-                          </select>
+                          <div className="space-y-1">
+                             <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Servizio Leva</label>
+                             <select className="w-full bg-white border border-gray-100 rounded-xl p-3 text-xs font-black" value={visitData.sezione6.fisiologica.leva} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, leva: e.target.value}}})}>
+                                <option>Assolto</option><option>Non assolto</option><option>Non pertinente</option>
+                             </select>
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Alvo e Diuresi</label>
+                             <input className="w-full bg-white border border-gray-100 rounded-xl p-3 text-xs font-black" value={visitData.sezione6.fisiologica.alvo_diuresi} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, alvo_diuresi: e.target.value}}})} />
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Alcol</label>
+                             <select className="w-full bg-white border border-gray-100 rounded-xl p-3 text-xs font-black" value={visitData.sezione6.fisiologica.alcol} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, alcol: e.target.value}}})}>
+                                <option>No</option><option>Sì</option>
+                             </select>
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Fumatore</label>
+                             <select className="w-full bg-white border border-gray-100 rounded-xl p-3 text-xs font-black" value={visitData.sezione6.fisiologica.fumatore.status} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, fisiologica: {...visitData.sezione6.fisiologica, fumatore: {...visitData.sezione6.fisiologica.fumatore, status: e.target.value}}}})}>
+                                <option>No</option><option>Sì</option>
+                             </select>
+                          </div>
                        </div>
                     </div>
                  </div>
                  <div className="space-y-8">
-                    <textarea placeholder="Anamnesi lavorativa passata..." className="input-standard h-40" value={visitData.sezione6.lavorativa} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, lavorativa: e.target.value}})} />
-                    <div className="bg-accent/5 p-6 rounded-3xl border border-accent/10 flex items-center gap-8">
-                       <label className="flex items-center gap-3 cursor-pointer">
-                          <input type="checkbox" className="w-6 h-6 rounded-lg text-accent" checked={visitData.sezione7.invalidita.status}
-                            onChange={e => setVisitData(prev => ({...prev, sezione7: {...prev.sezione7, invalidita: {...prev.sezione7.invalidita, status: e.target.checked}}}))} />
-                          <span className="text-xs font-black text-primary uppercase tracking-widest">Invalidità</span>
-                       </label>
-                       {visitData.sezione7.invalidita.status && (
-                          <input placeholder="Percentuale %" className="w-32 input-standard !py-2 text-xs" value={visitData.sezione7.invalidita.percentuale} onChange={e => setVisitData(prev => ({...prev, sezione7: {...prev.sezione7, invalidita: {...prev.sezione7.invalidita, percentuale: e.target.value}}}))} />
-                       )}
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
+                       <textarea placeholder="Esposizioni e mansioni passate..." className="input-standard h-40 text-sm font-medium" value={visitData.sezione6.lavorativa} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, lavorativa: e.target.value}})} />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Contemporanea esposizione altri datori</label>
+                       <textarea className="input-standard h-20 text-sm font-medium" value={visitData.sezione6.altri_datori} onChange={e => setVisitData({...visitData, sezione6: {...visitData.sezione6, altri_datori: e.target.value}})} />
                     </div>
                  </div>
               </div>
            </div>
+
+           <div className="glass-card p-10 rounded-[40px] shadow-xl">
+              <SectionTitle num="7" title="Eventi Sanitari e Infortuni" icon={AlertCircle} />
+              <div className="space-y-6">
+                 <textarea placeholder="Incidenti, malattie professionali, traumi..." className="input-standard h-24" value={visitData.sezione7.incidenti} onChange={e => setVisitData({...visitData, sezione7: {...visitData.sezione7, incidenti: e.target.value}})} />
+                 <div className="bg-accent/5 p-6 rounded-3xl border border-accent/10 flex items-center gap-8">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                       <input type="checkbox" className="w-6 h-6 rounded-lg text-accent" checked={visitData.sezione7.invalidita.status}
+                        onChange={e => {
+                          const val = e.target.checked;
+                          setVisitData(prev => ({...prev, sezione7: {...prev.sezione7, invalidita: {...prev.sezione7.invalidita, status: val}}}));
+                        }} />
+                       <span className="text-xs font-black text-primary uppercase tracking-widest">Invalidità Riconosciuta</span>
+                    </label>
+                    {visitData.sezione7.invalidita.status && (
+                       <div className="flex-1 flex gap-4 animate-in slide-in-from-left-4">
+                          <input placeholder="%" className="w-32 input-standard !py-2 text-xs" value={visitData.sezione7.invalidita.percentuale}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setVisitData(prev => ({...prev, sezione7: {...prev.sezione7, invalidita: {...prev.sezione7.invalidita, percentuale: val}}}));
+                            }} />
+                          <input placeholder="Causa" className="flex-1 input-standard !py-2 text-xs" value={visitData.sezione7.invalidita.causa}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setVisitData(prev => ({...prev, sezione7: {...prev.sezione7, invalidita: {...prev.sezione7.invalidita, causa: val}}}));
+                            }} />
+                       </div>
+                    )}
+                 </div>
+              </div>
+           </div>
+
            <div className="flex justify-between">
-              <button onClick={() => setStep(2)} className="btn-secondary px-8 py-3"><ChevronLeft size={18}/> Indietro</button>
-              <button onClick={() => setStep(4)} className="btn-teal px-12 py-4 shadow-xl">Prossimo <ChevronRight size={18}/></button>
+              <button onClick={() => setStep(2)} className="btn-secondary px-8 py-3 flex items-center gap-2"><ChevronLeft size={18}/> Indietro</button>
+              <button onClick={() => setStep(4)} className="btn-teal px-12 py-4 shadow-xl">Prossimo: Esame Obiettivo <ChevronRight size={18}/></button>
            </div>
         </div>
       )}
 
-      {/* STEP 4: ESAME OBIETTIVO & ALLEGATI */}
+      {/* STEP 4: ESAME OBIETTIVO (SECTION 9-10 + ANNEX A/B) */}
       {step === 4 && (
         <div className="space-y-12 animate-in fade-in duration-500">
            <div className="glass-card p-10 rounded-[40px] shadow-xl">
-              <SectionTitle num="9" title="Esame Obiettivo" icon={Stethoscope} />
+              <SectionTitle num="9" title="Esame Obiettivo Strutturato" icon={Stethoscope} />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-                 <div className="bg-warmWhite/30 p-4 rounded-2xl border border-gray-100 shadow-inner flex flex-col gap-1">
+                 <div className="bg-warmWhite/30 p-4 rounded-2xl flex flex-col gap-1 border border-gray-100 shadow-inner">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Altezza (cm)</label>
                     <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitData.sezione9.vitali.altezza} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, vitali: {...visitData.sezione9.vitali, altezza: e.target.value}}})} />
                  </div>
-                 <div className="bg-warmWhite/30 p-4 rounded-2xl border border-gray-100 shadow-inner flex flex-col gap-1">
+                 <div className="bg-warmWhite/30 p-4 rounded-2xl flex flex-col gap-1 border border-gray-100 shadow-inner">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Peso (kg)</label>
                     <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitData.sezione9.vitali.peso} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, vitali: {...visitData.sezione9.vitali, peso: e.target.value}}})} />
                  </div>
                  <div className="bg-primary/5 p-4 rounded-2xl flex flex-col justify-center items-center border border-primary/10">
-                    <label className="text-[9px] font-black text-primary uppercase">IMC (BMI)</label>
-                    <p className="font-black text-2xl text-primary">{imc}</p>
+                    <label className="text-[9px] font-black text-primary uppercase tracking-widest">IMC (BMI)</label>
+                    <p className="font-black text-2xl text-primary tracking-tighter">{imc}</p>
                  </div>
-                 <div className="bg-warmWhite/30 p-4 rounded-2xl border border-gray-100 shadow-inner flex flex-col gap-1">
+                 <div className="bg-warmWhite/30 p-4 rounded-2xl flex flex-col gap-1 border border-gray-100 shadow-inner">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Stato Generale</label>
                     <select className="bg-transparent font-black text-xs outline-none mt-2" value={visitData.sezione9.vitali.condizioni} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, vitali: {...visitData.sezione9.vitali, condizioni: e.target.value}}})}>
                        <option>Buone</option><option>Discrete</option><option>Scadenti</option>
@@ -424,55 +501,110 @@ const NuovaVisita = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                 <div className="bg-white border border-gray-100 p-8 rounded-3xl space-y-6 shadow-sm">
-                    <p className="text-[10px] font-black text-tealAction uppercase flex items-center gap-2 border-b border-gray-50 pb-2"><Heart size={14} /> Apparato Cardiovascolare</p>
-                    <div className="grid grid-cols-2 gap-4">
-                       <input placeholder="Toni" className="input-standard !py-2 text-xs" value={visitData.sezione9.distretti.cardio.toni} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, cardio: {...visitData.sezione9.distretti.cardio, toni: e.target.value}}}})} />
-                       <input placeholder="PA (es. 120/80)" className="input-standard !py-2 text-xs" value={visitData.sezione9.distretti.cardio.pa} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, cardio: {...visitData.sezione9.distretti.cardio, pa: e.target.value}}}})} />
+                 <div className="space-y-6">
+                    <div className="bg-white border border-gray-100 p-8 rounded-3xl space-y-6 shadow-sm">
+                       <p className="text-[10px] font-black text-tealAction uppercase flex items-center gap-2 border-b border-gray-50 pb-2"><Heart size={14} /> Apparato Cardiovascolare</p>
+                       <div className="grid grid-cols-3 gap-4">
+                          <input placeholder="Toni" className="input-standard !py-2 text-xs" value={visitData.sezione9.distretti.cardio.toni} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, cardio: {...visitData.sezione9.distretti.cardio, toni: e.target.value}}}})} />
+                          <input placeholder="F.C." className="input-standard !py-2 text-xs" value={visitData.sezione9.distretti.cardio.fc} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, cardio: {...visitData.sezione9.distretti.cardio, fc: e.target.value}}}})} />
+                          <input placeholder="PA (es. 120/80)" className="input-standard !py-2 text-xs" value={visitData.sezione9.distretti.cardio.pa} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, cardio: {...visitData.sezione9.distretti.cardio, pa: e.target.value}}}})} />
+                       </div>
                     </div>
-                    <textarea placeholder="Apparato respiratorio..." className="input-standard h-20 text-xs mt-4" value={visitData.sezione9.distretti.respiratorio} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, respiratorio: e.target.value}}})} />
+                    <div className="bg-white border border-gray-100 p-8 rounded-3xl space-y-4 shadow-sm">
+                       <p className="text-[10px] font-black text-tealAction uppercase flex items-center gap-2 border-b border-gray-50 pb-2"><Wind size={14} /> Apparato Respiratorio</p>
+                       <textarea placeholder="Murmure vescicolare..." className="input-standard h-20 text-xs" value={visitData.sezione9.distretti.respiratorio} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, respiratorio: e.target.value}}})} />
+                    </div>
                  </div>
-                 <div className="bg-white border border-gray-100 p-8 rounded-3xl space-y-6 shadow-sm">
-                    <p className="text-[10px] font-black text-tealAction uppercase flex items-center gap-2 border-b border-gray-50 pb-2"><Activity size={14} /> Apparato Osteoarticolare</p>
-                    <div className="grid grid-cols-2 gap-4">
-                       <select className="input-standard !py-1 text-[10px]" value={visitData.sezione9.distretti.osteoarticolare.lasegue_dx} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, osteoarticolare: {...visitData.sezione9.distretti.osteoarticolare, lasegue_dx: e.target.value}}}})}>
-                          <option>Lasegue DX: Negativa</option><option>Lasegue DX: Positiva</option>
-                       </select>
-                       <select className="input-standard !py-1 text-[10px]" value={visitData.sezione9.distretti.osteoarticolare.lasegue_sx} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, osteoarticolare: {...visitData.sezione9.distretti.osteoarticolare, lasegue_sx: e.target.value}}}})}>
-                          <option>Lasegue SX: Negativa</option><option>Lasegue SX: Positiva</option>
-                       </select>
+                 <div className="space-y-6">
+                    <div className="bg-white border border-gray-100 p-8 rounded-3xl space-y-6 shadow-sm">
+                       <p className="text-[10px] font-black text-tealAction uppercase flex items-center gap-2 border-b border-gray-50 pb-2"><Activity size={14} /> Apparato Osteoarticolare</p>
+                       <div className="flex gap-4">
+                          <select className="flex-1 input-standard !py-2 text-xs" value={visitData.sezione9.distretti.osteoarticolare.lasegue_dx} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, osteoarticolare: {...visitData.sezione9.distretti.osteoarticolare, lasegue_dx: e.target.value}}}})}>
+                             <option>Lasegue DX: Negativa</option><option>Lasegue DX: Positiva</option>
+                          </select>
+                          <select className="flex-1 input-standard !py-2 text-xs" value={visitData.sezione9.distretti.osteoarticolare.lasegue_sx} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, osteoarticolare: {...visitData.sezione9.distretti.osteoarticolare, lasegue_sx: e.target.value}}}})}>
+                             <option>Lasegue SX: Negativa</option><option>Lasegue SX: Positiva</option>
+                          </select>
+                       </div>
+                       <textarea placeholder="Rachide, paravertebrali, movimenti..." className="input-standard h-20 text-xs font-medium" value={visitData.sezione9.distretti.osteoarticolare.movimenti} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, osteoarticolare: {...visitData.sezione9.distretti.osteoarticolare, movimenti: e.target.value}}}})} />
                     </div>
-                    <textarea placeholder="Rachide, paravertebrali, movimenti..." className="input-standard h-24 text-xs font-medium" value={visitData.sezione9.distretti.osteoarticolare.movimenti} onChange={e => setVisitData({...visitData, sezione9: {...visitData.sezione9, distretti: {...visitData.sezione9.distretti, osteoarticolare: {...visitData.sezione9.distretti.osteoarticolare, movimenti: e.target.value}}}})} />
                  </div>
               </div>
+           </div>
 
-              {(visitData.sezione5.accertamenti.allegato_rachide || visitData.sezione5.accertamenti.strumentali.audiometria) && (
-                <div className="mt-12 space-y-12 border-t-4 border-accent/20 pt-12">
-                   <div className="flex items-center gap-3 text-accent"><AlertCircle size={24} /> <h2 className="text-xl font-black uppercase">Allegati Specialistici</h2></div>
-                   {visitData.sezione5.accertamenti.allegato_rachide && (
-                     <div className="bg-accent/5 p-10 rounded-[40px] border border-accent/10">
-                        <SectionTitle num="A" title="Rachide" icon={Activity} />
-                        <textarea placeholder="Conclusioni diagnostiche rachide..." className="input-standard h-40 text-sm font-medium shadow-inner" value={visitData.allegatoA.conclusioni} onChange={e => setVisitData({...visitData, allegatoA: {...visitData.allegatoA, conclusioni: e.target.value}})} />
-                     </div>
-                   )}
-                   {visitData.sezione5.accertamenti.strumentali.audiometria && (
-                     <div className="bg-tealAction/5 p-10 rounded-[40px] border border-tealAction/10">
-                        <SectionTitle num="B" title="Scheda Audiometrica" icon={Activity} />
-                        <div className="grid grid-cols-8 gap-2">
-                           {['f250', 'f500', 'f1k', 'f2k', 'f3k', 'f4k', 'f6k', 'f8k'].map(f => (
-                             <input key={f} className="w-full text-center text-xs font-black py-2 rounded-xl border border-gray-100" placeholder={f.substring(1)} value={(visitData.allegatoB.audiogramma.dx as any)[f]}
+           {/* ALLEGATI SPECIALISTICI (ONLY IF SELECTED IN STEP 2) */}
+           {(visitData.sezione5.accertamenti.allegato_rachide || visitData.sezione5.accertamenti.strumentali.audiometria) && (
+             <div className="space-y-12 border-t-4 border-accent/20 pt-12">
+                <div className="flex items-center gap-3">
+                   <div className="p-3 bg-accent text-white rounded-2xl shadow-lg shadow-accent/20"><AlertCircle size={24} /></div>
+                   <h2 className="text-2xl font-black text-primary uppercase tracking-tight italic">Moduli Specialistici Allegati</h2>
+                </div>
+
+                {visitData.sezione5.accertamenti.allegato_rachide && (
+                   <div className="bg-white border-2 border-accent/10 p-10 rounded-[40px] shadow-2xl animate-in slide-in-from-bottom-6 duration-500">
+                      <SectionTitle num="A" title="Valutazione Funzionale Rachide" icon={Activity} />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                         <div className="space-y-6">
+                            <p className="text-[10px] font-black text-primary uppercase tracking-widest border-b border-gray-50 pb-2">Analisi Curvature</p>
+                            <div className="grid grid-cols-2 gap-4">
+                               {['lordosi_c', 'lordosi_l', 'cifosi'].map(curv => (
+                                 <div key={curv} className="bg-warmWhite/50 p-4 rounded-2xl shadow-inner">
+                                    <label className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">{curv.replace('_', ' ')}</label>
+                                    <select className="w-full text-xs font-black bg-transparent outline-none mt-1" value={(visitData.allegatoA as any)[curv]} onChange={e => setVisitData({...visitData, allegatoA: {...visitData.allegatoA, [curv]: e.target.value}})}>
+                                       <option>Normale</option><option>Accentuata</option><option>Appiattita</option>
+                                    </select>
+                                 </div>
+                               ))}
+                            </div>
+                         </div>
+                         <div className="space-y-4">
+                            <p className="text-[10px] font-black text-primary uppercase tracking-widest border-b border-gray-50 pb-2">Conclusioni Allegato A</p>
+                            <textarea placeholder="Esito valutazione rachide..." className="input-standard h-40 text-sm font-medium" value={visitData.allegatoA.conclusioni} onChange={e => setVisitData({...visitData, allegatoA: {...visitData.allegatoA, conclusioni: e.target.value}})} />
+                         </div>
+                      </div>
+                   </div>
+                )}
+
+                {visitData.sezione5.accertamenti.strumentali.audiometria && (
+                   <div className="bg-white border-2 border-tealAction/10 p-10 rounded-[40px] shadow-2xl animate-in slide-in-from-bottom-6 duration-700">
+                      <SectionTitle num="B" title="Scheda Audiometrica" icon={Activity} />
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
+                         <div className="bg-warmWhite/50 p-5 rounded-2xl shadow-inner">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">DPI Otoprotettori</label>
+                            <select className="w-full bg-transparent font-black text-xs outline-none mt-2" value={visitData.allegatoB.dpi} onChange={e => setVisitData({...visitData, allegatoB: {...visitData.allegatoB, dpi: e.target.value}})}>
+                               <option>No</option><option>Sì</option>
+                            </select>
+                         </div>
+                         <div className="bg-warmWhite/50 p-5 rounded-2xl shadow-inner">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Esame Otoscopico DX</label>
+                            <input className="w-full bg-transparent font-black text-xs outline-none mt-2 border-b border-gray-100" value={visitData.allegatoB.otoscopico_dx} onChange={e => setVisitData({...visitData, allegatoB: {...visitData.allegatoB, otoscopico_dx: e.target.value}})} />
+                         </div>
+                         <div className="bg-warmWhite/50 p-5 rounded-2xl shadow-inner">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Esame Otoscopico SX</label>
+                            <input className="w-full bg-transparent font-black text-xs outline-none mt-2 border-b border-gray-100" value={visitData.allegatoB.otoscopico_sx} onChange={e => setVisitData({...visitData, allegatoB: {...visitData.allegatoB, otoscopico_sx: e.target.value}})} />
+                         </div>
+                      </div>
+                      <div className="bg-primary/5 p-8 rounded-3xl">
+                         <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-6 text-center italic opacity-60">Griglia Audiogramma (DX / SX)</p>
+                         <div className="grid grid-cols-9 gap-4 text-center items-center">
+                            <div className="text-[9px] font-black text-gray-300">Hz</div>
+                            {['250', '500', '1k', '2k', '3k', '4k', '6k', '8k'].map(f => <div key={f} className="text-[10px] font-black text-primary">{f}</div>)}
+                            <div className="text-[11px] font-black text-tealAction">DX</div>
+                            {['f250', 'f500', 'f1k', 'f2k', 'f3k', 'f4k', 'f6k', 'f8k'].map(f => (
+                              <input key={f} className="w-full text-center text-xs font-black py-2 rounded-xl border border-gray-100 shadow-sm" value={(visitData.allegatoB.audiogramma.dx as any)[f]}
                                 onChange={e => {
                                   const val = e.target.value;
                                   setVisitData(prev => ({...prev, allegatoB: {...prev.allegatoB, audiogramma: {...prev.allegatoB.audiogramma, dx: {...prev.allegatoB.audiogramma.dx, [f]: val}}}}));
                                 }} />
-                           ))}
-                        </div>
-                     </div>
-                   )}
-                </div>
-              )}
-           </div>
-           <div className="flex justify-between">
+                            ))}
+                         </div>
+                      </div>
+                   </div>
+                )}
+             </div>
+           )}
+
+           <div className="flex justify-between mt-12 pt-12 border-t border-gray-50">
               <button onClick={() => setStep(3)} className="btn-secondary px-8 py-3 flex items-center gap-2"><ChevronLeft size={18}/> Indietro</button>
               <button onClick={() => setStep(5)} className="btn-teal px-12 py-4 shadow-xl shadow-tealAction/20">Giudizio e Firme <ChevronRight size={18}/></button>
            </div>
@@ -498,6 +630,7 @@ const NuovaVisita = () => {
                     {visitData.sezione11.giudizio.includes('temporaneo') && (
                        <div className="bg-red-50 p-8 rounded-3xl border-2 border-red-100 animate-in zoom-in duration-300">
                           <p className="text-[10px] font-black text-red-600 uppercase flex items-center gap-2"><Clock size={16} /> Richiamo Obbligatorio</p>
+                          <label className="text-[9px] font-bold text-gray-500 uppercase">Data prevista nuova visita</label>
                           <input type="date" className="input-standard mt-4" value={visitData.sezione11.data_nuova_visita} onChange={e => setVisitData({...visitData, sezione11: {...visitData.sezione11, data_nuova_visita: e.target.value}})} />
                        </div>
                     )}
@@ -508,17 +641,30 @@ const NuovaVisita = () => {
            <div className="glass-card p-10 rounded-[40px] shadow-xl">
               <SectionTitle num="13" title="Validazione e Firme" icon={PenTool} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                 <SignatureInput label="Firma Lavoratore" onSave={sig => setVisitData({...visitData, sezione8: {...visitData.sezione8, firma: sig}})} />
-                 <SignatureInput label="Firma Medico" onSave={sig => setVisitData({...visitData, sezione13: {...visitData.sezione13, firma_medico: sig}})} />
+                 <div className="space-y-6">
+                    <SignatureInput label="Firma del Lavoratore (per presa visione)" onSave={sig => setVisitData({...visitData, sezione8: {...visitData.sezione8, firma: sig}})} />
+                    <p className="text-[9px] text-gray-400 font-medium leading-relaxed bg-gray-50 p-4 rounded-2xl italic border border-gray-100">
+                       Dichiaro di aver ricevuto copia del giudizio di idoneità e di essere stato informato sugli accertamenti effettuati.
+                    </p>
+                 </div>
+                 <div className="space-y-6">
+                    <SignatureInput label="Firma del Medico Competente" onSave={sig => setVisitData({...visitData, sezione13: {...visitData.sezione13, firma_medico: sig}})} />
+                    <label className="flex items-center gap-3 cursor-pointer group mt-4">
+                       <input type="checkbox" className="w-5 h-5 rounded border-gray-200 text-primary" checked={visitData.sezione13.conformita_elettronica} onChange={e => setVisitData({...visitData, sezione13: {...visitData.sezione13, conformita_elettronica: e.target.checked}})} />
+                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-primary transition-colors">Dichiaro conformità copia elettronica</span>
+                    </label>
+                 </div>
               </div>
            </div>
 
            <div className="flex justify-between items-center bg-sidebar p-10 rounded-[50px] shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-full bg-accent/5 opacity-20 pointer-events-none" />
-              <button onClick={() => setStep(4)} className="text-white/40 font-black uppercase text-xs hover:text-white transition flex items-center gap-2"><ChevronLeft size={16}/> Indietro</button>
-              <button onClick={handleSave} className="btn-accent px-20 py-6 text-lg font-black flex items-center gap-4 shadow-[0_20px_50px_rgba(232,130,12,0.4)] hover:scale-[1.02] transition-all">
-                <Download size={28} strokeWidth={3} /> FINALIZZA E ARCHIVIA
-              </button>
+              <button onClick={() => setStep(4)} className="text-white/40 font-black uppercase text-xs hover:text-white transition relative z-10 flex items-center gap-2"><ChevronLeft size={16}/> Indietro</button>
+              <div className="flex gap-6 relative z-10">
+                 <button onClick={handleSave} className="btn-accent px-20 py-6 text-lg font-black flex items-center gap-4 shadow-[0_20px_50px_rgba(232,130,12,0.4)] hover:scale-[1.02] transition-all">
+                   <Download size={28} strokeWidth={3} /> FINALIZZA E ARCHIVIA
+                 </button>
+              </div>
            </div>
         </div>
       )}

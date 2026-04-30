@@ -268,7 +268,16 @@ const runMigrations = (database: Database) => {
     { id: 20, sql: "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;" },
     { id: 21, sql: "ALTER TABLE visits ADD COLUMN eo_altro TEXT;" },
     { id: 22, sql: "ALTER TABLE visits ADD COLUMN structured_anamnesis TEXT;" },
-    { id: 23, sql: "ALTER TABLE workers ADD COLUMN permanent_anamnesis TEXT;" }
+    { id: 23, sql: "ALTER TABLE workers ADD COLUMN permanent_anamnesis TEXT;" },
+    { id: 24, sql: "ALTER TABLE visits ADD COLUMN periodicita TEXT;" },
+    { id: 25, sql: "ALTER TABLE visits ADD COLUMN sorveglianza_dati TEXT;" },
+    { id: 26, sql: "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;" },
+    { id: 27, sql: "ALTER TABLE visits ADD COLUMN eventi_sanitari TEXT;" },
+    { id: 28, sql: "ALTER TABLE visits ADD COLUMN esame_obiettivo_strutturato TEXT;" },
+    { id: 29, sql: "ALTER TABLE visits ADD COLUMN valutazione_accertamenti TEXT;" },
+    { id: 30, sql: "ALTER TABLE visits ADD COLUMN trasmissione_dati TEXT;" },
+    { id: 31, sql: "ALTER TABLE visits ADD COLUMN allegato_a TEXT;" },
+    { id: 32, sql: "ALTER TABLE visits ADD COLUMN allegato_b TEXT;" }
   ];
 
   let currentVersion = 0;
