@@ -268,20 +268,7 @@ const runMigrations = (database: Database) => {
     { id: 20, sql: "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;" },
     { id: 21, sql: "ALTER TABLE visits ADD COLUMN eo_altro TEXT;" },
     { id: 22, sql: "ALTER TABLE visits ADD COLUMN structured_anamnesis TEXT;" },
-    { id: 23, sql: "ALTER TABLE workers ADD COLUMN permanent_anamnesis TEXT;" },
-    { id: 24, sql: "ALTER TABLE workers ADD COLUMN nazionalita TEXT;" },
-    { id: 25, sql: "ALTER TABLE workers ADD COLUMN gruppo_sanguigno TEXT;" },
-    { id: 26, sql: "ALTER TABLE workers ADD COLUMN domicilio TEXT;" },
-    { id: 27, sql: "ALTER TABLE workers ADD COLUMN telefono TEXT;" },
-    { id: 28, sql: "ALTER TABLE visits ADD COLUMN periodicita TEXT;" },
-    { id: 29, sql: "ALTER TABLE visits ADD COLUMN sorveglianza_dati TEXT;" },
-    { id: 30, sql: "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;" },
-    { id: 31, sql: "ALTER TABLE visits ADD COLUMN eventi_sanitari TEXT;" },
-    { id: 32, sql: "ALTER TABLE visits ADD COLUMN esame_obiettivo_strutturato TEXT;" },
-    { id: 33, sql: "ALTER TABLE visits ADD COLUMN valutazione_accertamenti TEXT;" },
-    { id: 34, sql: "ALTER TABLE visits ADD COLUMN trasmissione_dati TEXT;" },
-    { id: 35, sql: "ALTER TABLE visits ADD COLUMN allegato_a TEXT;" },
-    { id: 36, sql: "ALTER TABLE visits ADD COLUMN allegato_b TEXT;" }
+    { id: 23, sql: "ALTER TABLE workers ADD COLUMN permanent_anamnesis TEXT;" }
   ];
 
   let currentVersion = 0;
@@ -313,6 +300,7 @@ export const saveDB = async () => {
   await saveEncryptedDB(data);
 
   // Emergency Mirroring: Save critical worker data to localStorage as JSON
+  // Limited to 5MB, but should fit thousands of basic worker records
   try {
     const criticalData = db.exec("SELECT id, nome, cognome, codice_fiscale, mansione FROM workers");
     if (criticalData.length > 0) {
