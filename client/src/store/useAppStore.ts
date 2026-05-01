@@ -199,6 +199,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         WHERE visits.worker_id = ?
         ORDER BY visits.data_visita DESC
       `, [workerId]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       set({ selectedWorker: w || null, workerVisits: v as any });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Errore caricamento storico lavoratore" });
@@ -214,7 +215,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         WHERE workers.rischi IS NOT NULL AND workers.rischi != '[]'
         ORDER BY azienda ASC, cognome ASC
       `);
-      set({ exposedWorkers: data });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      set({ exposedWorkers: data as any });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Errore caricamento registro esposti" });
     }

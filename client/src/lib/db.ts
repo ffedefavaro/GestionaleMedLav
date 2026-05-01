@@ -274,6 +274,7 @@ export const getDB = () => db;
 
 export const executeQuery = <T>(sql: string, params?: (string | number | boolean | null)[]): T[] => {
   if (!db) throw new Error("Database non inizializzato");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = db.exec(sql, params as any);
   if (result.length === 0) return [];
 
@@ -289,6 +290,7 @@ export const executeQuery = <T>(sql: string, params?: (string | number | boolean
 
 export const runCommand = async (sql: string, params?: (string | number | boolean | null)[]) => {
   if (!db) throw new Error("Database non inizializzato");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db.run(sql, params as any);
   await saveDB();
 };

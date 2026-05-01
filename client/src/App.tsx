@@ -52,7 +52,8 @@ function App() {
   }, []);
 
   const handleReset = () => {
-    if (confirm("Sei sicuro? Questo cancellerà tutti i dati locali e ripristinerà il database vuoto.")) {
+    const confirmation = prompt("ATTENZIONE: Questa operazione cancellerà PERMANENTEMENTE tutti i dati locali. Per confermare, scrivi 'CANCELLA':");
+    if (confirmation === 'CANCELLA') {
       localStorage.clear();
       del('cartsan_db_v2').then(() => {
         window.location.reload();
@@ -109,8 +110,15 @@ function App() {
     );
   }
 
+  const isProduction = window.location.hostname === 'gestionalemedlav.netlify.app';
+
   return (
     <Router>
+      {!isProduction && (
+        <div className="bg-accent text-white px-4 py-2 text-center text-[10px] font-black uppercase tracking-[0.2em] z-[100] relative">
+          ⚠️ Ambiente non di produzione - I dati salvati qui sono isolati su questo dominio
+        </div>
+      )}
       <div className="flex h-screen bg-warmWhite overflow-hidden font-sans text-anthracite">
         <Sidebar />
         <main className="flex-1 overflow-auto bg-warmWhite relative">
