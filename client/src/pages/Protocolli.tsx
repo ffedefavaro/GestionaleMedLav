@@ -1,22 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { runCommand } from '../lib/db';
 import {
   ClipboardList, Plus, Trash2, Copy, Shield,
   AlertCircle, Download, ListChecks, Search, Edit2
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { useAppStore } from '../store/useAppStore';
+import type { ProtocolExam } from '../types';
 
-interface Exam {
-  nome: string;
-  periodicita: number;
-  obbligatorio: boolean;
+interface ProtocolWithAziendaInfo {
+  id: number;
+  company_id: number;
+  mansione: string;
+  azienda: string;
+  homogeneous_group: string;
+  risks: string[];
+  esami: ProtocolExam[];
+  periodicita_mesi: number;
+  is_customizable: number;
 }
 
 const Protocolli = () => {
-  const [protocolli, setProtocolli] = useState<any[]>([]);
-  const [aziende, setAziende] = useState<any[]>([]);
-  const [rischiMaster, setRischiMaster] = useState<any[]>([]);
-  const [examsMaster, setExamsMaster] = useState<any[]>([]);
+  const {
+    protocols, companies: aziende, examsMaster,
+    fetchProtocols, fetchCompanies, fetchMasters
+  } = useAppStore();
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,38 +34,29 @@ const Protocolli = () => {
     mansione: '',
     homogeneous_group: '',
     risks: [] as string[],
-    esami: [] as Exam[],
+    esami: [] as ProtocolExam[],
     periodicita_mesi: 12,
-    is_customizable: 1
+    is_customizable: 1 as number
   });
 
-  const fetchData = () => {
-    const p = executeQuery(`
-      SELECT
-        protocols.*,
-        companies.ragione_sociale as azienda,
-        (SELECT COUNT(*) FROM workers WHERE workers.protocol_id = protocols.id) as num_lavoratori
-      FROM protocols
-      JOIN companies ON protocols.company_id = companies.id
-      ORDER BY azienda ASC, mansione ASC
-    `);
-    const a = executeQuery("SELECT id, ragione_sociale FROM companies ORDER BY ragione_sociale ASC");
-    const r = executeQuery("SELECT * FROM risks_master ORDER BY categoria, nome");
-    const e = executeQuery("SELECT * FROM exams_master ORDER BY nome");
-
-    setProtocolli(p.map(item => ({
-      ...item,
-      risks: JSON.parse(item.risks || '[]'),
-      esami: JSON.parse(item.esami || '[]')
-    })));
-    setAziende(a);
-    setRischiMaster(r);
-    setExamsMaster(e);
-  };
+  const initData = useCallback(() => {
+    fetchProtocols();
+    fetchCompanies();
+    fetchMasters();
+  }, [fetchProtocols, fetchCompanies, fetchMasters]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    initData();
+  }, [initData]);
+
+  const protocolliParsed = useMemo(() => {
+    return protocols.map(p => ({
+      ...p,
+      azienda: aziende.find(a => a.id === p.company_id)?.ragione_sociale || 'N/D',
+      risks: JSON.parse(p.risks || '[]') as string[],
+      esami: JSON.parse(p.esami || '[]') as ProtocolExam[]
+    })) as ProtocolWithAziendaInfo[];
+  }, [protocols, aziende]);
 
   const handleAddExam = (examName: string) => {
     if (!examName) return;
@@ -74,9 +73,9 @@ const Protocolli = () => {
     setFormData({ ...formData, esami: newExams });
   };
 
-  const updateExam = (index: number, field: keyof Exam, value: any) => {
+  const updateExam = (index: number, field: keyof ProtocolExam, value: string | number | boolean) => {
     const newExams = [...formData.esami];
-    newExams[index] = { ...newExams[index], [field]: value };
+    newExams[index] = { ...newExams[index], [field]: value } as ProtocolExam;
     setFormData({ ...formData, esami: newExams });
   };
 
@@ -109,7 +108,7 @@ const Protocolli = () => {
     setShowForm(false);
     setEditingId(null);
     resetForm();
-    fetchData();
+    fetchProtocols();
   };
 
   const resetForm = () => {
@@ -124,17 +123,21 @@ const Protocolli = () => {
     });
   };
 
-  const handleClone = (p: any) => {
+  const handleClone = (p: ProtocolWithAziendaInfo) => {
     setFormData({
-      ...p,
       company_id: '',
-      mansione: `${p.mansione} (Copia)`
+      mansione: `${p.mansione} (Copia)`,
+      homogeneous_group: p.homogeneous_group || '',
+      risks: p.risks,
+      esami: p.esami,
+      periodicita_mesi: p.periodicita_mesi,
+      is_customizable: p.is_customizable
     });
     setEditingId(null);
     setShowForm(true);
   };
 
-  const handleEdit = (p: any) => {
+  const handleEdit = (p: ProtocolWithAziendaInfo) => {
     setFormData({
       company_id: p.company_id.toString(),
       mansione: p.mansione,
@@ -151,11 +154,12 @@ const Protocolli = () => {
   const handleDelete = async (id: number) => {
     if (confirm("Sei sicuro di voler eliminare questa mansione?")) {
       await runCommand("DELETE FROM protocols WHERE id = ?", [id]);
-      fetchData();
+      fetchProtocols();
     }
   };
 
-  const generateProtocolPDF = (p: any) => {
+  const generateProtocolPDF = async (p: ProtocolWithAziendaInfo) => {
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF();
 
     doc.setFont("helvetica", "bold");
@@ -177,7 +181,7 @@ const Protocolli = () => {
     doc.text("PIANO DEGLI ACCERTAMENTI:", 20, 85);
 
     let y = 95;
-    p.esami.forEach((e: Exam) => {
+    p.esami.forEach((e: ProtocolExam) => {
       doc.setFont("helvetica", "normal");
       doc.text(`- ${e.nome} (${e.periodicita} mesi) - ${e.obbligatorio ? 'Obbligatorio' : 'Consigliato'}`, 25, y);
       y += 8;
@@ -186,10 +190,12 @@ const Protocolli = () => {
     doc.save(`Protocollo_${p.azienda}_${p.mansione}.pdf`);
   };
 
-  const filtered = protocolli.filter(p =>
-    p.mansione.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.azienda.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    return protocolliParsed.filter(p =>
+      p.mansione.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.azienda.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [protocolliParsed, searchTerm]);
 
   return (
     <div className="p-10 max-w-7xl mx-auto">
@@ -255,7 +261,7 @@ const Protocolli = () => {
                 <AlertCircle size={16} className="text-tealAction" /> Fattori di Rischio Associati (DVR)
               </label>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 bg-warmWhite/30 p-6 rounded-[24px] border border-gray-100 shadow-inner">
-                {rischiMaster.map(r => (
+                {examsMaster && useAppStore.getState().risksMaster.map(r => (
                   <label key={r.id} className={`flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all border ${
                     formData.risks.includes(r.nome) ? 'bg-primary text-white border-primary shadow-md' : 'bg-white text-gray-500 border-gray-100 hover:border-primary/20'
                   }`}>
@@ -400,19 +406,19 @@ const Protocolli = () => {
                   </td>
                   <td className="px-8 py-6">
                     <div className="flex flex-wrap gap-1">
-                      {p.risks.slice(0, 2).map((r: string, i: number) => (
+                      {(p.risks || []).slice(0, 2).map((r: string, i: number) => (
                         <span key={i} className="bg-primary/5 text-primary px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-primary/5">
                           {r}
                         </span>
                       ))}
-                      {p.risks.length > 2 && <span className="text-[9px] text-gray-400 font-black">+{p.risks.length - 2}</span>}
+                      {p.risks && p.risks.length > 2 && <span className="text-[9px] text-gray-400 font-black">+{p.risks.length - 2}</span>}
                     </div>
                   </td>
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-3">
                        <div className="flex flex-col">
                           <span className="text-[10px] font-black text-gray-400 uppercase leading-none mb-1">Accertamenti</span>
-                          <span className="text-sm font-black text-primary">{p.esami.length} esami</span>
+                          <span className="text-sm font-black text-primary">{(p.esami || []).length} esami</span>
                        </div>
                        <div className="w-8 h-8 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
                           <ListChecks size={14} />

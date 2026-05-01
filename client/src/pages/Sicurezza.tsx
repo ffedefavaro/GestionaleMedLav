@@ -1,11 +1,22 @@
-import { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
+import { useState, useEffect, useCallback } from 'react';
+import { runCommand } from '../lib/db';
 import { GraduationCap, Plus, User, Package } from 'lucide-react';
 import WorkerSearch from '../components/WorkerSearch';
+import { useAppStore } from '../store/useAppStore';
+import type { TrainingRecord, PPEAssigned } from '../types';
+
+interface TrainingWithWorker extends TrainingRecord {
+  nome: string;
+  cognome: string;
+}
+
+interface PPEWithWorker extends PPEAssigned {
+  nome: string;
+  cognome: string;
+}
 
 const Sicurezza = () => {
-  const [training, setTraining] = useState<any[]>([]);
-  const [ppe, setPpe] = useState<any[]>([]);
+  const { trainingRecords, ppeRecords, fetchTraining, fetchPPE } = useAppStore();
 
   const [selectedWorker, setSelectedWorker] = useState('');
   const [showTrainingForm, setShowTrainingForm] = useState(false);
@@ -14,24 +25,14 @@ const Sicurezza = () => {
   const [tForm, setTForm] = useState({ corso: '', data: '', scadenza: '' });
   const [pForm, setPForm] = useState({ dispositivo: '', data: '', scadenza: '' });
 
-  const fetchData = () => {
-    setTraining(executeQuery(`
-      SELECT training_records.*, workers.nome, workers.cognome
-      FROM training_records
-      JOIN workers ON training_records.worker_id = workers.id
-      ORDER BY training_records.scadenza ASC
-    `));
-    setPpe(executeQuery(`
-      SELECT ppe_assigned.*, workers.nome, workers.cognome
-      FROM ppe_assigned
-      JOIN workers ON ppe_assigned.worker_id = workers.id
-      ORDER BY ppe_assigned.scadenza_sostituzione ASC
-    `));
-  };
+  const fetchData = useCallback(() => {
+    fetchTraining();
+    fetchPPE();
+  }, [fetchTraining, fetchPPE]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const addTraining = async () => {
     if (!selectedWorker || !tForm.corso) return;
@@ -119,12 +120,12 @@ const Sicurezza = () => {
                 </tr>
               </thead>
               <tbody>
-                {training.map(t => (
+                {(trainingRecords as TrainingWithWorker[]).map((t) => (
                   <tr key={t.id} className="group">
                     <td className="font-black text-primary">{t.cognome}</td>
                     <td>
                       <div className="text-gray-600 font-bold text-sm">{t.corso}</div>
-                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Conseguito: {t.data}</div>
+                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Conseguito: {t.data_completamento}</div>
                     </td>
                     <td className="text-right">
                        <span className="bg-tealAction/5 text-tealAction px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-tealAction/10">
@@ -133,7 +134,7 @@ const Sicurezza = () => {
                     </td>
                   </tr>
                 ))}
-                {training.length === 0 && (
+                {trainingRecords.length === 0 && (
                   <tr><td colSpan={3} className="text-center py-10 text-gray-300 italic">Nessun record di formazione</td></tr>
                 )}
               </tbody>
@@ -187,12 +188,12 @@ const Sicurezza = () => {
                 </tr>
               </thead>
               <tbody>
-                {ppe.map(p => (
+                {(ppeRecords as PPEWithWorker[]).map((p) => (
                   <tr key={p.id}>
                     <td className="font-black text-primary">{p.cognome}</td>
                     <td>
                       <div className="text-gray-600 font-bold text-sm">{p.dispositivo}</div>
-                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Consegnato: {p.data}</div>
+                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-tighter">Consegnato: {p.data_consegna}</div>
                     </td>
                     <td className="text-right">
                        <span className="bg-accent/5 text-accent px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-accent/10">
@@ -201,7 +202,7 @@ const Sicurezza = () => {
                     </td>
                   </tr>
                 ))}
-                {ppe.length === 0 && (
+                {ppeRecords.length === 0 && (
                    <tr><td colSpan={3} className="text-center py-10 text-gray-300 italic">Nessun DPI consegnato</td></tr>
                 )}
               </tbody>

@@ -13,8 +13,9 @@ import {
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
+import React from 'react';
 
-const SidebarItem = ({ icon: Icon, label, to, active }: { icon: any, label: string, to: string, active: boolean }) => (
+const SidebarItem = ({ icon: Icon, label, to, active }: { icon: React.ElementType, label: string, to: string, active: boolean }) => (
   <Link
     to={to}
     className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${

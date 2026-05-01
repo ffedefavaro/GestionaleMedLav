@@ -1,31 +1,29 @@
-import { useState, useEffect } from 'react';
-import { executeQuery } from '../lib/db';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Download, AlertCircle, FileText, Filter } from 'lucide-react';
-
+import { useAppStore } from '../store/useAppStore';
 const RegistroEsposti = () => {
-  const [esposti, setEsposti] = useState<any[]>([]);
+  const { exposedWorkers: esposti, fetchExposedWorkers } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    const data = executeQuery(`
-      SELECT workers.cognome, workers.nome, workers.codice_fiscale, workers.mansione, workers.rischi, companies.ragione_sociale as azienda
-      FROM workers
-      JOIN companies ON workers.company_id = companies.id
-      WHERE workers.rischi IS NOT NULL AND workers.rischi != '[]'
-      ORDER BY azienda ASC, cognome ASC
-    `);
-    setEsposti(data);
-  }, []);
+  const initData = useCallback(() => {
+    fetchExposedWorkers();
+  }, [fetchExposedWorkers]);
 
-  const filtered = esposti.filter(e =>
-    `${e.nome} ${e.cognome}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.rischi.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.azienda.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    initData();
+  }, [initData]);
+
+  const filtered = useMemo(() => {
+    return esposti.filter(e =>
+      `${e.nome} ${e.cognome}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (e.rischi && e.rischi.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      e.azienda.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [esposti, searchTerm]);
 
   const exportCSV = () => {
     const headers = ["Azienda", "Lavoratore", "CF", "Mansione", "Rischi"];
-    const rows = filtered.map(e => [e.azienda, `${e.cognome} ${e.nome}`, e.codice_fiscale, e.mansione, JSON.parse(e.rischi).join(";")]);
+    const rows = filtered.map(e => [e.azienda, `${e.cognome} ${e.nome}`, e.codice_fiscale, e.mansione, JSON.parse(e.rischi || '[]').join(";")]);
     const content = [headers, ...rows].map(r => r.join(",")).join("\n");
     const blob = new Blob([content], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -109,7 +107,7 @@ const RegistroEsposti = () => {
                   </td>
                   <td>
                     <div className="flex flex-wrap gap-1.5">
-                      {JSON.parse(e.rischi).map((r: string, i: number) => (
+                      {JSON.parse(e.rischi || '[]').map((r: string, i: number) => (
                         <span key={i} className="bg-red-50 text-red-600 px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-tighter border border-red-100 flex items-center gap-1.5">
                           <AlertCircle size={10} /> {r}
                         </span>

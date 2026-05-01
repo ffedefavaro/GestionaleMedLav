@@ -1,42 +1,42 @@
-import { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { runCommand } from '../lib/db';
 import {
   Calendar as CalendarIcon, Clock, Bell, Mail,
   FileSpreadsheet, Search, Filter,
   ChevronRight, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { isAfter, isBefore, addDays } from 'date-fns';
+import { useAppStore } from '../store/useAppStore';
 
 const Scadenziario = () => {
-  const [visite, setVisite] = useState<any[]>([]);
+  const { visits: visite, fetchVisits } = useAppStore();
   const [filter, setFilter] = useState('all'); // all, expired, upcoming
   const [searchTerm, setSearchTerm] = useState('');
 
+  const initData = useCallback(() => {
+    fetchVisits();
+  }, [fetchVisits]);
+
   useEffect(() => {
-    const data = executeQuery(`
-      SELECT visits.id, visits.data_visita, visits.scadenza_prossima, visits.giudizio,
-             workers.nome, workers.cognome, workers.codice_fiscale, companies.ragione_sociale as azienda, workers.mansione
-      FROM visits
-      JOIN workers ON visits.worker_id = workers.id
-      JOIN companies ON workers.company_id = companies.id
-      ORDER BY visits.scadenza_prossima ASC
-    `);
-    setVisite(data);
-  }, []);
+    initData();
+  }, [initData]);
 
-  const today = new Date();
-  const next30Days = addDays(today, 30);
+  const today = useMemo(() => new Date(), []);
+  const next30Days = useMemo(() => addDays(today, 30), [today]);
 
-  const filtered = visite.filter(v => {
-    const expiry = new Date(v.scadenza_prossima);
-    const matchesSearch = `${v.nome} ${v.cognome} ${v.azienda}`.toLowerCase().includes(searchTerm.toLowerCase());
+  const filtered = useMemo(() => {
+    return visite.filter(v => {
+      const expiryStr = v.scadenza_prossima || '';
+      const expiry = expiryStr ? new Date(expiryStr) : new Date(0);
+      const matchesSearch = `${v.nome} ${v.cognome} ${v.azienda}`.toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchesFilter = true;
-    if (filter === 'expired') matchesFilter = isBefore(expiry, today);
-    if (filter === 'upcoming') matchesFilter = isAfter(expiry, today) && isBefore(expiry, next30Days);
+      let matchesFilter = true;
+      if (filter === 'expired') matchesFilter = isBefore(expiry, today);
+      if (filter === 'upcoming') matchesFilter = isAfter(expiry, today) && isBefore(expiry, next30Days);
 
-    return matchesSearch && matchesFilter;
-  });
+      return matchesSearch && matchesFilter;
+    });
+  }, [visite, searchTerm, filter, today, next30Days]);
 
   const export3B = async () => {
     // Basic CSV export for Allegato 3B
@@ -81,7 +81,10 @@ const Scadenziario = () => {
         />
         <StatusFilter
           label="In Scadenza (30gg)"
-          count={visite.filter(v => isAfter(new Date(v.scadenza_prossima), today) && isBefore(new Date(v.scadenza_prossima), next30Days)).length}
+          count={visite.filter(v => {
+            const d = v.scadenza_prossima ? new Date(v.scadenza_prossima) : null;
+            return d && isAfter(d, today) && isBefore(d, next30Days);
+          }).length}
           active={filter === 'upcoming'}
           onClick={() => setFilter('upcoming')}
           icon={<Clock size={20} />}
@@ -89,7 +92,10 @@ const Scadenziario = () => {
         />
         <StatusFilter
           label="Scadute / Irregolari"
-          count={visite.filter(v => isBefore(new Date(v.scadenza_prossima), today)).length}
+          count={visite.filter(v => {
+            const d = v.scadenza_prossima ? new Date(v.scadenza_prossima) : null;
+            return d && isBefore(d, today);
+          }).length}
           active={filter === 'expired'}
           onClick={() => setFilter('expired')}
           icon={<Bell size={20} />}
@@ -131,7 +137,7 @@ const Scadenziario = () => {
             </thead>
             <tbody>
               {filtered.map((v) => {
-                const expiry = new Date(v.scadenza_prossima);
+                const expiry = v.scadenza_prossima ? new Date(v.scadenza_prossima) : new Date(0);
                 const isExpired = isBefore(expiry, today);
                 const isUpcoming = isAfter(expiry, today) && isBefore(expiry, next30Days);
 
@@ -197,7 +203,7 @@ const Scadenziario = () => {
   );
 };
 
-const StatusFilter = ({ label, count, active, onClick, icon, color }: { label: string, count: number, active: boolean, onClick: () => void, icon: any, color: string }) => (
+const StatusFilter = ({ label, count, active, onClick, icon, color }: { label: string, count: number, active: boolean, onClick: () => void, icon: React.ReactNode, color: string }) => (
   <button
     onClick={onClick}
     className={`p-6 rounded-[32px] border transition-all duration-300 text-left flex justify-between items-center group ${

@@ -36,20 +36,24 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
 
   useEffect(() => {
     if (query.length < 2) {
-      setResults([]);
-      return;
+      const timeout = setTimeout(() => setResults([]), 0);
+      return () => clearTimeout(timeout);
     }
 
-    const searchResults = executeQuery(`
-      SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, companies.ragione_sociale as azienda
-      FROM workers
-      JOIN companies ON workers.company_id = companies.id
-      WHERE workers.nome LIKE ? OR workers.cognome LIKE ? OR companies.ragione_sociale LIKE ?
-      LIMIT 10
-    `, [`%${query}%`, `%${query}%`, `%${query}%`]);
+    const timeout = setTimeout(() => {
+      const searchResults = executeQuery<Worker>(`
+        SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, companies.ragione_sociale as azienda
+        FROM workers
+        JOIN companies ON workers.company_id = companies.id
+        WHERE workers.nome LIKE ? OR workers.cognome LIKE ? OR companies.ragione_sociale LIKE ?
+        LIMIT 10
+      `, [`%${query}%`, `%${query}%`, `%${query}%`]);
 
-    setResults(searchResults);
-    setIsOpen(true);
+      setResults(searchResults);
+      setIsOpen(true);
+    }, 150); // Debounce to avoid too many DB queries and sync setState issues
+
+    return () => clearTimeout(timeout);
   }, [query]);
 
   const handleSelect = (worker: Worker) => {

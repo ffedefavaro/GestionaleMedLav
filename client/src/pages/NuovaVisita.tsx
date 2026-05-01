@@ -1,16 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
+import { useAppStore } from '../store/useAppStore';
+import type { ProtocolExam, DoctorProfile, Visit } from '../types';
+
+interface WorkerWithAziendaInfo {
+  id: number;
+  nome: string;
+  cognome: string;
+  mansione: string;
+  email: string;
+  codice_fiscale: string;
+  azienda: string;
+  company_id: number;
+}
 
 const NuovaVisita = () => {
-  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const { workers, companies, fetchWorkers, fetchCompanies } = useAppStore();
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
-  const [workerData, setWorkerData] = useState<any>(null);
   const [step, setStep] = useState(1);
 
   // Gmail State
@@ -48,25 +59,25 @@ const NuovaVisita = () => {
 
   useEffect(() => {
     fetchWorkers();
-  }, []);
+    fetchCompanies();
+  }, [fetchWorkers, fetchCompanies]);
 
-  const fetchWorkers = () => {
-    const data = executeQuery(`
-      SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, workers.codice_fiscale, companies.ragione_sociale as azienda
-      FROM workers
-      JOIN companies ON workers.company_id = companies.id
-    `);
-    setLavoratori(data);
-  };
+  const lavoratoriWithAzienda = useMemo(() => {
+    return workers.map(w => ({
+      ...w,
+      azienda: companies.find(c => c.id === w.company_id)?.ragione_sociale || 'N/D'
+    })) as WorkerWithAziendaInfo[];
+  }, [workers, companies]);
 
-  useEffect(() => {
+  const workerData = useMemo(() => {
+    return lavoratoriWithAzienda.find(l => l.id.toString() === selectedWorkerId) || null;
+  }, [lavoratoriWithAzienda, selectedWorkerId]);
+
+  const handleWorkerChange = useCallback(() => {
     if (selectedWorkerId) {
-      const data = lavoratori.find(l => l.id.toString() === selectedWorkerId);
-      if (data) {
-        setWorkerData(data);
-
-        const fullWorker = executeQuery(`
-          SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
+      try {
+        const fullWorker = executeQuery<{ protocol_periodicity: number, is_protocol_customized: number, custom_protocol: string }>(`
+          SELECT workers.is_protocol_customized, workers.custom_protocol, protocols.periodicita_mesi as protocol_periodicity
           FROM workers
           LEFT JOIN protocols ON workers.protocol_id = protocols.id
           WHERE workers.id = ?
@@ -76,9 +87,9 @@ const NuovaVisita = () => {
           let months = fullWorker.protocol_periodicity || 12;
           if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
             try {
-              const customExams = JSON.parse(fullWorker.custom_protocol);
+              const customExams = JSON.parse(fullWorker.custom_protocol) as ProtocolExam[];
               if (customExams.length > 0) {
-                months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+                months = Math.min(...customExams.map(e => e.periodicita || 12));
               }
             } catch (e) {
               console.error("Error parsing custom protocol", e);
@@ -89,29 +100,42 @@ const NuovaVisita = () => {
           nextDate.setMonth(nextDate.getMonth() + months);
           setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
         }
+      } catch (error) {
+        console.error("Errore recupero dettagli lavoratore:", error);
       }
-    } else {
-      setWorkerData(null);
     }
-  }, [selectedWorkerId, lavoratori]);
+  }, [selectedWorkerId]);
+
+  useEffect(() => {
+    // Avoid synchronous setState by using a slight delay or checking if update is actually needed
+    // However, since it's an async side effect of worker selection, we can just call it.
+    // The linter warning is because it's called during the render cycle or synchronously in useEffect.
+    const timeout = setTimeout(() => handleWorkerChange(), 0);
+    return () => clearTimeout(timeout);
+  }, [handleWorkerChange]);
 
   const handleAuthAndFetch = async () => {
     const clientId = await get('google_client_id');
-    if (!clientId) {
-      alert("Configura il Client ID nelle impostazioni prima di usare Gmail.");
+    if (!clientId || !workerData) {
+      alert("Configura il Client ID nelle impostazioni e seleziona un lavoratore prima di usare Gmail.");
       return;
     }
 
     setLoadingGmail(true);
     try {
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
+      const client = (window as unknown as { google: { accounts: { oauth2: { initTokenClient: (config: { client_id: string, scope: string, callback: (response: { access_token: string }) => void }) => { requestAccessToken: () => void } } } } }).google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        callback: async (response: any) => {
+        callback: async (response: { access_token: string }) => {
           if (response.access_token) {
             setAccessToken(response.access_token);
-            const msgs = await fetchGmailMessages(response.access_token, workerData.email);
-            setGmailMessages(msgs);
+            try {
+              const msgs = await fetchGmailMessages(response.access_token, workerData.email);
+              setGmailMessages(msgs);
+            } catch (err) {
+              console.error("Errore fetch Gmail:", err);
+              alert("Errore nel recupero delle email.");
+            }
           }
           setLoadingGmail(false);
         },
@@ -160,16 +184,16 @@ const NuovaVisita = () => {
       visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
     ]);
 
-    const lastVisitData = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
+    const lastVisitData = executeQuery<Pick<Visit, 'id'>>("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
 
     // Log action for legal audit
-    await runCommand(
-      "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
-      ["FINALIZE", "visits", lastVisitData.id, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
-    );
+    if (lastVisitData && workerData) {
+      await runCommand(
+        "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+        ["FINALIZE", "visits", lastVisitData.id, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
+      );
 
-    // 2. Insert Biometrics
-    if (lastVisitData) {
+      // 2. Insert Biometrics
       const bmi = visitForm.peso / ((visitForm.altezza/100) ** 2);
       await runCommand(`
         INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca, spo2)
@@ -183,8 +207,10 @@ const NuovaVisita = () => {
     setSelectedWorkerId('');
   };
 
-  const generatePDF = () => {
-    const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
+  const generatePDF = async () => {
+    if (!workerData) return;
+    const { jsPDF } = await import('jspdf');
+    const doctorData = executeQuery<DoctorProfile>("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
     const doc = new jsPDF();
 
     // GIUDIZIO DI IDONEITÀ
@@ -363,7 +389,7 @@ const NuovaVisita = () => {
                 <h2 className="text-2xl font-black tracking-tight">Anamnesi</h2>
               </div>
               <div className="bg-warmWhite/50 p-2 px-4 rounded-2xl border border-gray-100 font-black text-primary uppercase text-xs">
-                {workerData.cognome} {workerData.nome}
+              {workerData?.cognome} {workerData?.nome}
               </div>
             </div>
 
@@ -465,7 +491,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={(visitForm as Record<string, string | number>)[field.id] as string || ''}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -485,7 +511,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={(visitForm as Record<string, string | number>)[field.id] as string || ''}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -532,7 +558,7 @@ const NuovaVisita = () => {
               <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <div className="flex gap-4">
                  <a
-                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
+                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData?.cognome}+${workerData?.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
                   target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
                  <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva e Stampa</button>
               </div>

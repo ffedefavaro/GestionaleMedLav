@@ -258,7 +258,7 @@ const runMigrations = (database: Database) => {
   migrations.forEach(m => {
     try {
       database.run(m);
-    } catch (e) {
+    } catch {
       // Expected if column already exists
     }
   });
@@ -272,23 +272,23 @@ export const saveDB = async () => {
 
 export const getDB = () => db;
 
-export const executeQuery = (sql: string, params?: any[]) => {
+export const executeQuery = <T>(sql: string, params?: (string | number | boolean | null)[]): T[] => {
   if (!db) throw new Error("Database non inizializzato");
-  const result = db.exec(sql, params);
+  const result = db.exec(sql, params as any);
   if (result.length === 0) return [];
 
   const columns = result[0].columns;
   return result[0].values.map(row => {
-    const obj: any = {};
+    const obj: Record<string, string | number | boolean | null> = {};
     columns.forEach((col, i) => {
-      obj[col] = row[i];
+      obj[col] = row[i] as string | number | boolean | null;
     });
-    return obj;
+    return obj as unknown as T;
   });
 };
 
-export const runCommand = async (sql: string, params?: any[]) => {
+export const runCommand = async (sql: string, params?: (string | number | boolean | null)[]) => {
   if (!db) throw new Error("Database non inizializzato");
-  db.run(sql, params);
+  db.run(sql, params as any);
   await saveDB();
 };

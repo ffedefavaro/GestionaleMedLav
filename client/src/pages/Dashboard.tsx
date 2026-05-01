@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { executeQuery } from '../lib/db';
 import { Building2, Users, Stethoscope, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Dashboard = () => {
+  // Use useMemo for stats to avoid setState in useEffect if it can be derived,
+  // but it's from DB, so we use a standard pattern that avoids synchronous update if possible.
   const [stats, setStats] = useState({
     aziende: 0,
     scadenzeImminenti: 0, // 7 days
@@ -11,13 +13,26 @@ const Dashboard = () => {
     idoneitaScadenza: 0 // 30 days
   });
 
-  useEffect(() => {
-    const a = executeQuery("SELECT count(*) as count FROM companies")[0]?.count || 0;
-    const v = executeQuery("SELECT count(*) as count FROM visits WHERE data_visita = date('now')")[0]?.count || 0;
-    const imminenti = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+7 days')")[0]?.count || 0;
-    const scadenza30 = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+30 days')")[0]?.count || 0;
-    setStats({ aziende: a, scadenzeImminenti: imminenti, visiteOggi: v, idoneitaScadenza: scadenza30 });
+  const fetchStats = useCallback(() => {
+    const a = (executeQuery<{ count: number }>("SELECT count(*) as count FROM companies")[0])?.count || 0;
+    const v = (executeQuery<{ count: number }>("SELECT count(*) as count FROM visits WHERE data_visita = date('now')")[0])?.count || 0;
+    const imminenti = (executeQuery<{ count: number }>("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+7 days')")[0])?.count || 0;
+    const scadenza30 = (executeQuery<{ count: number }>("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+30 days')")[0])?.count || 0;
+
+    // Check if stats actually changed before setting to avoid unnecessary renders
+    setStats(prev => {
+      if (prev.aziende === a && prev.scadenzeImminenti === imminenti && prev.visiteOggi === v && prev.idoneitaScadenza === scadenza30) {
+        return prev;
+      }
+      return { aziende: a, scadenzeImminenti: imminenti, visiteOggi: v, idoneitaScadenza: scadenza30 };
+    });
   }, []);
+
+  useEffect(() => {
+    // Schedule the fetch to avoid synchronous setState during render/mount phase
+    const timeout = setTimeout(() => fetchStats(), 0);
+    return () => clearTimeout(timeout);
+  }, [fetchStats]);
 
   return (
     <div className="p-10 max-w-7xl mx-auto">
@@ -131,7 +146,7 @@ const Dashboard = () => {
   );
 };
 
-const StatCard = ({ icon, label, value, trend, highlight, warning }: { icon: any, label: string, value: number, trend?: string, highlight?: boolean, warning?: boolean }) => (
+const StatCard = ({ icon, label, value, trend, highlight, warning }: { icon: React.ReactNode, label: string, value: number, trend?: string, highlight?: boolean, warning?: boolean }) => (
   <div className={`group bg-white p-7 rounded-[32px] border border-white shadow-lg shadow-primary/5 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden ${highlight ? 'ring-2 ring-tealAction/20' : ''}`}>
     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 ${warning ? 'bg-accent/10 text-accent' : highlight ? 'bg-tealAction/10 text-tealAction' : 'bg-primary/5 text-primary'}`}>
       {icon}

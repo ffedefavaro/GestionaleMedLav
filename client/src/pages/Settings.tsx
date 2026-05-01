@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand, getDB } from '../lib/db';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getDB } from '../lib/db';
 import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
-import { set, del, get } from 'idb-keyval';
+import { set, del } from 'idb-keyval';
+import { useAppStore } from '../store/useAppStore';
 
 const Settings = () => {
+  const { doctorProfile, auditLogs, fetchSettings, saveDoctorProfile } = useAppStore();
+
   const [doctor, setDoctor] = useState({
     nome: '',
     specializzazione: '',
@@ -16,24 +19,35 @@ const Settings = () => {
     clientSecret: ''
   });
 
-  const [logs, setLogs] = useState<any[]>([]);
+  const initData = useCallback(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   useEffect(() => {
-    const data = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
-    if (data.length > 0) {
-      setDoctor(data[0]);
-    }
-    const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
-    setLogs(auditLogs);
+    initData();
+  }, [initData]);
 
-    // Load Google config from IndexedDB
-    const loadGoogle = async () => {
-      const cid = await get('google_client_id');
-      const cs = await get('google_client_secret');
-      setGoogleConfig({ clientId: cid || '', clientSecret: cs || '' });
-    };
-    loadGoogle();
-  }, []);
+  useEffect(() => {
+    if (doctorProfile) {
+      const timeout = setTimeout(() => {
+        setDoctor(prev => {
+          if (prev.nome === doctorProfile.nome &&
+              prev.specializzazione === doctorProfile.specializzazione &&
+              prev.n_iscrizione === doctorProfile.n_iscrizione &&
+              prev.timbro_immagine === (doctorProfile.timbro_immagine || '')) {
+            return prev;
+          }
+          return {
+            nome: doctorProfile.nome,
+            specializzazione: doctorProfile.specializzazione,
+            n_iscrizione: doctorProfile.n_iscrizione,
+            timbro_immagine: doctorProfile.timbro_immagine || ''
+          };
+        });
+      }, 0);
+      return () => clearTimeout(timeout);
+    }
+  }, [doctorProfile]);
 
   const saveGoogleConfig = async () => {
     await set('google_client_id', googleConfig.clientId);
@@ -43,18 +57,7 @@ const Settings = () => {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    const exists = executeQuery("SELECT id FROM doctor_profile WHERE id = 1");
-    if (exists.length > 0) {
-      await runCommand(
-        "UPDATE doctor_profile SET nome = ?, specializzazione = ?, n_iscrizione = ?, timbro_immagine = ? WHERE id = 1",
-        [doctor.nome, doctor.specializzazione, doctor.n_iscrizione, doctor.timbro_immagine]
-      );
-    } else {
-      await runCommand(
-        "INSERT INTO doctor_profile (id, nome, specializzazione, n_iscrizione, timbro_immagine) VALUES (1, ?, ?, ?, ?)",
-        [doctor.nome, doctor.specializzazione, doctor.n_iscrizione, doctor.timbro_immagine]
-      );
-    }
+    await saveDoctorProfile(doctor);
     alert("Profilo Medico salvato!");
   };
 
@@ -169,7 +172,7 @@ const Settings = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {logs.map(log => (
+                  {auditLogs.map(log => (
                     <tr key={log.id} className="hover:bg-primary/5 transition-colors">
                       <td className="!py-4 font-mono text-[10px] text-gray-400 !bg-transparent">{log.timestamp}</td>
                       <td className="!py-4 !bg-transparent">

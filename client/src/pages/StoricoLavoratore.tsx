@@ -1,22 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { executeQuery } from '../lib/db';
 import { User, Activity, FileText, ArrowLeft, Download, Clipboard, Clock } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { useAppStore } from '../store/useAppStore';
+import type { Visit, DoctorProfile } from '../types';
 
 const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () => void }) => {
-  const [worker, setWorker] = useState<any>(null);
-  const [visits, setVisits] = useState<any[]>([]);
+  const { selectedWorker: worker, workerVisits: visits, fetchWorkerHistory } = useAppStore();
+
+  const initData = useCallback(() => {
+    fetchWorkerHistory(workerId);
+  }, [workerId, fetchWorkerHistory]);
 
   useEffect(() => {
-    const w = executeQuery("SELECT * FROM workers WHERE id = ?", [workerId])[0];
-    const v = executeQuery("SELECT * FROM visits WHERE worker_id = ? ORDER BY data_visita DESC", [workerId]);
-    setWorker(w);
-    setVisits(v);
-  }, [workerId]);
+    initData();
+  }, [initData]);
 
-  const reprintGiudizio = (visit: any) => {
+  const reprintGiudizio = async (visit: Visit) => {
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF();
-    const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
+    const doctorData = (executeQuery<DoctorProfile>("SELECT * FROM doctor_profile WHERE id = 1")[0] || {}) as Partial<DoctorProfile>;
 
     doc.setFont("helvetica", "bold");
     doc.text("GIUDIZIO DI IDONEITÀ (RISTAMPA)", 105, 20, { align: 'center' });
@@ -25,10 +27,10 @@ const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () 
 
     doc.setFont("helvetica", "normal");
     doc.rect(15, 35, 180, 45);
-    doc.text(`Lavoratore: ${worker.cognome} ${worker.nome}`, 20, 45);
-    doc.text(`Codice Fiscale: ${worker.codice_fiscale || 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${worker.company_id}`, 20, 57); // Would need join for name
-    doc.text(`Mansione: ${worker.mansione}`, 20, 63);
+    doc.text(`Lavoratore: ${worker?.cognome} ${worker?.nome}`, 20, 45);
+    doc.text(`Codice Fiscale: ${worker?.codice_fiscale || 'N/D'}`, 20, 51);
+    doc.text(`Azienda: ${worker?.company_id}`, 20, 57); // Would need join for name
+    doc.text(`Mansione: ${worker?.mansione}`, 20, 63);
     doc.text(`Data Visita: ${visit.data_visita}`, 20, 69);
     doc.text(`Tipo Visita: ${visit.tipo_visita.toUpperCase()}`, 20, 75);
 
@@ -41,7 +43,7 @@ const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () 
     doc.text(`Prossima visita entro il: ${visit.scadenza_prossima}`, 20, 140);
 
     doc.text(`Dott. ${doctorData.nome || '...' }`, 130, 170);
-    doc.save(`Ristampa_Giudizio_${worker.cognome}_${visit.data_visita}.pdf`);
+    doc.save(`Ristampa_Giudizio_${worker?.cognome}_${visit.data_visita}.pdf`);
   };
 
   if (!worker) return null;

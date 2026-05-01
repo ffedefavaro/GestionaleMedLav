@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
+import { runCommand } from '../lib/db';
 import { Plus, Search, Edit2, Trash2, Building2, MapPin } from 'lucide-react';
+import { useAppStore } from '../store/useAppStore';
+import type { Company } from '../types';
 
 const Aziende = () => {
-  const [aziende, setAziende] = useState<any[]>([]);
+  const { companies, fetchCompanies } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Omit<Company, 'id'>>({
     ragione_sociale: '',
     p_iva: '',
     ateco: '',
@@ -16,25 +18,25 @@ const Aziende = () => {
     rls: ''
   });
 
-  const fetchAziende = () => {
-    const data = executeQuery("SELECT * FROM companies ORDER BY ragione_sociale ASC");
-    setAziende(data);
-  };
-
   useEffect(() => {
-    fetchAziende();
-  }, []);
+    fetchCompanies();
+  }, [fetchCompanies]);
 
   const handleDelete = async (id: number, name: string) => {
     if (confirm(`Sei sicuro di voler eliminare l'azienda ${name}? Questa azione eliminerà anche tutti i protocolli associati.`)) {
-      await runCommand("DELETE FROM companies WHERE id = ?", [id]);
-      await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
-        ["DELETE", "companies", `Eliminata azienda: ${name} (ID: ${id})`]);
-      fetchAziende();
+      try {
+        await runCommand("DELETE FROM companies WHERE id = ?", [id]);
+        await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+          ["DELETE", "companies", `Eliminata azienda: ${name} (ID: ${id})`]);
+        fetchCompanies();
+      } catch (error) {
+        console.error("Errore durante l'eliminazione:", error);
+        alert("Errore durante l'eliminazione dell'azienda.");
+      }
     }
   };
 
-  const handleEdit = (azienda: any) => {
+  const handleEdit = (azienda: Company) => {
     setFormData({
       ragione_sociale: azienda.ragione_sociale,
       p_iva: azienda.p_iva || '',
@@ -52,32 +54,37 @@ const Aziende = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-      await runCommand(
-        `UPDATE companies SET ragione_sociale = ?, p_iva = ?, ateco = ?, sede_operativa = ?, referente = ?, rspp = ?, rls = ? WHERE id = ?`,
-        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls, editingId]
-      );
-    } else {
-      await runCommand(
-        `INSERT INTO companies (ragione_sociale, p_iva, ateco, sede_operativa, referente, rspp, rls)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls]
-      );
+    try {
+      if (editingId) {
+        await runCommand(
+          `UPDATE companies SET ragione_sociale = ?, p_iva = ?, ateco = ?, sede_operativa = ?, referente = ?, rspp = ?, rls = ? WHERE id = ?`,
+          [formData.ragione_sociale, formData.p_iva || null, formData.ateco || null, formData.sede_operativa || null, formData.referente || null, formData.rspp || null, formData.rls || null, editingId]
+        );
+      } else {
+        await runCommand(
+          `INSERT INTO companies (ragione_sociale, p_iva, ateco, sede_operativa, referente, rspp, rls)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [formData.ragione_sociale, formData.p_iva || null, formData.ateco || null, formData.sede_operativa || null, formData.referente || null, formData.rspp || null, formData.rls || null]
+        );
+      }
+
+      // Audit log for legal compliance
+      await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
+        ["SAVE", "companies", `${editingId ? 'Modificata' : 'Nuova'} azienda: ${formData.ragione_sociale}`]);
+
+      setShowForm(false);
+      setEditingId(null);
+      setFormData({ ragione_sociale: '', p_iva: '', ateco: '', sede_operativa: '', referente: '', rspp: '', rls: '' });
+      fetchCompanies();
+    } catch (error) {
+      console.error("Errore durante il salvataggio:", error);
+      alert("Errore durante il salvataggio dell'azienda.");
     }
-
-    // Audit log for legal compliance
-    await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
-      ["INSERT", "companies", `Nuova azienda: ${formData.ragione_sociale}`]);
-
-    setShowForm(false);
-    setEditingId(null);
-    setFormData({ ragione_sociale: '', p_iva: '', ateco: '', sede_operativa: '', referente: '', rspp: '', rls: '' });
-    fetchAziende();
   };
 
-  const filtered = aziende.filter(a =>
+  const filtered = companies.filter(a =>
     a.ragione_sociale.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.p_iva.includes(searchTerm)
+    (a.p_iva && a.p_iva.includes(searchTerm))
   );
 
   return (

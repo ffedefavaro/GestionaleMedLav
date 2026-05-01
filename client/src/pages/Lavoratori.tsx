@@ -1,17 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { runCommand } from '../lib/db';
 import {
   Plus, Search, Edit2, Trash2, Filter, ClipboardList,
   Shield, AlertCircle, CheckCircle2, ChevronRight, User,
   Briefcase, Info, History
 } from 'lucide-react';
 import StoricoLavoratore from './StoricoLavoratore';
+import { useAppStore } from '../store/useAppStore';
+import type { Worker, ProtocolExam } from '../types';
+
+interface WorkerWithAziendaInfo extends Worker {
+  azienda: string;
+  protocol_name?: string;
+  custom_protocol_parsed: ProtocolExam[];
+}
 
 const Lavoratori = () => {
-  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const {
+    workers, companies: aziende, protocols: protocolsRaw,
+    fetchWorkers, fetchCompanies, fetchProtocols
+  } = useAppStore();
+
   const [selectedForHistory, setSelectedForHistory] = useState<number | null>(null);
-  const [aziende, setAziende] = useState<any[]>([]);
-  const [protocolli, setProtocolli] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,39 +36,40 @@ const Lavoratori = () => {
     data_nascita: '',
     data_assunzione: '',
     protocol_id: '',
-    is_protocol_customized: 0,
-    custom_protocol: [] as any[],
+    is_protocol_customized: 0 as number,
+    custom_protocol: [] as ProtocolExam[],
     protocol_override_reason: ''
   });
 
-  const fetchData = () => {
-    const l = executeQuery(`
-      SELECT
-        workers.*,
-        companies.ragione_sociale as azienda,
-        protocols.mansione as protocol_name
-      FROM workers
-      JOIN companies ON workers.company_id = companies.id
-      LEFT JOIN protocols ON workers.protocol_id = protocols.id
-      ORDER BY cognome ASC
-    `);
-    const a = executeQuery("SELECT id, ragione_sociale FROM companies ORDER BY ragione_sociale ASC");
-    const p = executeQuery("SELECT * FROM protocols");
-
-    setLavoratori(l.map(item => ({
-      ...item,
-      custom_protocol: JSON.parse(item.custom_protocol || '[]')
-    })));
-    setAziende(a);
-    setProtocolli(p.map(item => ({
-      ...item,
-      esami: JSON.parse(item.esami || '[]')
-    })));
-  };
+  const initData = useCallback(() => {
+    fetchWorkers();
+    fetchCompanies();
+    fetchProtocols();
+  }, [fetchWorkers, fetchCompanies, fetchProtocols]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    initData();
+  }, [initData]);
+
+  const protocolli = useMemo(() => {
+    return protocolsRaw.map(p => ({
+      ...p,
+      esami_parsed: JSON.parse(p.esami || '[]') as ProtocolExam[]
+    }));
+  }, [protocolsRaw]);
+
+  const lavoratori = useMemo(() => {
+    return workers.map(w => {
+      const azienda = aziende.find(a => a.id === w.company_id)?.ragione_sociale || 'N/D';
+      const protocol = protocolli.find(p => p.id === w.protocol_id);
+      return {
+        ...w,
+        azienda,
+        protocol_name: protocol?.mansione,
+        custom_protocol_parsed: JSON.parse(w.custom_protocol || '[]') as ProtocolExam[]
+      };
+    }) as WorkerWithAziendaInfo[];
+  }, [workers, aziende, protocolli]);
 
   const handleProtocolChange = (protocolId: string) => {
     const selected = protocolli.find(p => p.id.toString() === protocolId);
@@ -67,7 +78,7 @@ const Lavoratori = () => {
         ...formData,
         protocol_id: protocolId,
         is_protocol_customized: 0,
-        custom_protocol: selected.esami,
+        custom_protocol: selected.esami_parsed,
         protocol_override_reason: ''
       });
     } else {
@@ -81,9 +92,9 @@ const Lavoratori = () => {
     }
   };
 
-  const toggleExamCustomization = (index: number, field: string, value: any) => {
+  const toggleExamCustomization = (index: number, field: keyof ProtocolExam, value: string | number | boolean) => {
     const newProtocol = [...formData.custom_protocol];
-    newProtocol[index] = { ...newProtocol[index], [field]: value };
+    newProtocol[index] = { ...newProtocol[index], [field]: value } as ProtocolExam;
     setFormData({
       ...formData,
       custom_protocol: newProtocol,
@@ -106,7 +117,7 @@ const Lavoratori = () => {
       await runCommand("DELETE FROM workers WHERE id = ?", [id]);
       await runCommand("INSERT INTO audit_logs (action, table_name, details) VALUES (?, ?, ?)",
         ["DELETE", "workers", `Eliminato lavoratore: ${name} (ID: ${id})`]);
-      fetchData();
+      initData();
     }
   };
 
@@ -126,7 +137,7 @@ const Lavoratori = () => {
       if (old && (old.protocol_id?.toString() !== formData.protocol_id || old.is_protocol_customized !== formData.is_protocol_customized)) {
         await runCommand(
           "INSERT INTO worker_protocol_history (worker_id, old_protocol, new_protocol, reason) VALUES (?, ?, ?, ?)",
-          [editingId, JSON.stringify(old.custom_protocol), JSON.stringify(formData.custom_protocol), formData.protocol_override_reason || 'Modifica anagrafica']
+          [editingId, JSON.stringify(old.custom_protocol_parsed), JSON.stringify(formData.custom_protocol), formData.protocol_override_reason || 'Modifica anagrafica']
         );
       }
 
@@ -153,7 +164,7 @@ const Lavoratori = () => {
     setShowForm(false);
     setEditingId(null);
     resetForm();
-    fetchData();
+    initData();
   };
 
   const resetForm = () => {
@@ -172,7 +183,7 @@ const Lavoratori = () => {
     });
   };
 
-  const handleEdit = (l: any) => {
+  const handleEdit = (l: WorkerWithAziendaInfo) => {
     setFormData({
       company_id: l.company_id.toString(),
       nome: l.nome,
@@ -183,7 +194,7 @@ const Lavoratori = () => {
       data_assunzione: l.data_assunzione || '',
       protocol_id: l.protocol_id ? l.protocol_id.toString() : '',
       is_protocol_customized: l.is_protocol_customized || 0,
-      custom_protocol: l.custom_protocol || [],
+      custom_protocol: l.custom_protocol_parsed || [],
       protocol_override_reason: l.protocol_override_reason || ''
     });
     setEditingId(l.id);
