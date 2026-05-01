@@ -24,7 +24,7 @@ describe('Database Encryption Utils', () => {
   it('should load and decrypt data from idb-keyval', async () => {
     // First save to get the encrypted string
     let savedEncrypted: string = '';
-    vi.mocked(set).mockImplementation(async (key, value) => {
+    vi.mocked(set).mockImplementation(async (_key, value) => {
       savedEncrypted = value as string;
     });
 
@@ -45,7 +45,7 @@ describe('Database Encryption Utils', () => {
   it('should return null if decryption fails', async () => {
      // Save with one password
     let savedEncrypted: string = '';
-    vi.mocked(set).mockImplementation(async (key, value) => {
+    vi.mocked(set).mockImplementation(async (_key, value) => {
       savedEncrypted = value as string;
     });
     await saveEncryptedDB(mockDbData, password);
