@@ -84,7 +84,8 @@ const Settings = () => {
   };
 
   const clearDB = async () => {
-    if (confirm("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Procedere?")) {
+    const confirmation = prompt("ATTENZIONE: Questa operazione eliminerà TUTTI i dati permanentemente dal browser. Per confermare, scrivi 'CANCELLA':");
+    if (confirmation === 'CANCELLA') {
       await del('cartsan_db_v2');
       window.location.reload();
     }
