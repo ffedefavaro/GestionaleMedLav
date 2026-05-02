@@ -22,6 +22,15 @@ export interface AppointmentLog {
   timestamp: string;
 }
 
+export interface AuditLog {
+  id: number;
+  timestamp: string;
+  action: string;
+  table_name?: string;
+  resource_id?: number;
+  details: string;
+}
+
 export interface Worker {
   id: number;
   company_id: number;
@@ -30,6 +39,7 @@ export interface Worker {
   codice_fiscale: string;
   email?: string;
   mansione?: string;
+  azienda_ragione_sociale?: string;
 }
 
 export interface Company {

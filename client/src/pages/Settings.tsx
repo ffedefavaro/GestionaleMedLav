@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand, getDB } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
+import { executeQuery, runCommand, getDB, anonymizeWorker } from '../lib/db';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, ShieldCheck, Search, AlertTriangle } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
+import type { Worker, AuditLog } from '../types';
 
 const Settings = () => {
   const [doctor, setDoctor] = useState({
@@ -16,15 +17,31 @@ const Settings = () => {
     clientSecret: ''
   });
 
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showGDPRModal, setShowGDPRModal] = useState(false);
+  const [workerToAnon, setWorkerToAnon] = useState<Worker | null>(null);
 
-  useEffect(() => {
+  const fetchData = () => {
     const data = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
     if (data.length > 0) {
       setDoctor(data[0]);
     }
-    const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
+    const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50") as AuditLog[];
     setLogs(auditLogs);
+
+    const workersData = executeQuery(`
+      SELECT w.*, c.ragione_sociale as azienda_ragione_sociale
+      FROM workers w
+      JOIN companies c ON w.company_id = c.id
+      ORDER BY w.cognome, w.nome
+    `) as Worker[];
+    setWorkers(workersData);
+  };
+
+  useEffect(() => {
+    fetchData();
 
     // Load Google config from IndexedDB
     const loadGoogle = async () => {
@@ -56,6 +73,7 @@ const Settings = () => {
       );
     }
     alert("Profilo Medico salvato!");
+    fetchData();
   };
 
   const handleExportDB = () => {
@@ -90,6 +108,24 @@ const Settings = () => {
       window.location.reload();
     }
   };
+
+  const handleAnonymize = async () => {
+    if (!workerToAnon) return;
+    try {
+      await anonymizeWorker(workerToAnon.id);
+      alert(`Lavoratore anonimizzato con successo.`);
+      setShowGDPRModal(false);
+      setWorkerToAnon(null);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      alert("Errore durante l'anonimizzazione.");
+    }
+  };
+
+  const filteredWorkers = workers.filter(w =>
+    `${w.nome} ${w.cognome} ${w.codice_fiscale}`.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="p-10 max-w-7xl mx-auto">
@@ -185,6 +221,76 @@ const Settings = () => {
               </table>
             </div>
           </div>
+
+          {/* GDPR Privacy Section */}
+          <div className="glass-card rounded-[40px] overflow-hidden border-2 border-primary/5">
+            <div className="p-8 bg-tealAction text-white font-black flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <h2 className="text-lg uppercase tracking-tight">Privacy e GDPR</h2>
+                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest leading-none">Diritto all'oblio e anonimizzazione</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-10 space-y-8">
+              <div className="bg-primary/5 p-6 rounded-3xl border border-primary/10">
+                 <p className="text-xs text-primary font-bold leading-relaxed">
+                   La normativa GDPR prevede il diritto all'oblio. L'anonimizzazione sostituisce i dati identificativi (Nome, Cognome, CF, Email) con codici hash irreversibili, mantenendo i dati clinici per gli obblighi legali di conservazione (40 anni).
+                 </p>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-white p-3 rounded-2xl shadow-inner border border-gray-100 flex items-center gap-3">
+                  <Search className="text-gray-300" size={20} />
+                  <input
+                    placeholder="Cerca lavoratore da anonimizzare..."
+                    className="flex-1 bg-transparent outline-none text-sm font-bold placeholder:text-gray-300"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <div className="max-h-64 overflow-y-auto custom-scrollbar border border-gray-100 rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 font-black text-gray-400 uppercase">Lavoratore</th>
+                        <th className="px-4 py-3 font-black text-gray-400 uppercase">Azienda</th>
+                        <th className="px-4 py-3 text-right">Azione</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredWorkers.map(w => (
+                        <tr key={w.id} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-3 font-bold text-primary">
+                             {w.cognome} {w.nome}
+                             <p className="text-[10px] text-gray-400 font-mono">{w.codice_fiscale}</p>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 font-medium">{w.azienda_ragione_sociale}</td>
+                          <td className="px-4 py-3 text-right">
+                             {!w.nome.startsWith('ANON_') ? (
+                               <button
+                                onClick={() => { setWorkerToAnon(w); setShowGDPRModal(true); }}
+                                className="p-2 text-accent hover:bg-accent/10 rounded-xl transition-all"
+                                title="Anonimizza"
+                               >
+                                 <Trash2 size={16} />
+                               </button>
+                             ) : (
+                               <span className="text-[9px] font-black text-tealAction uppercase">Già anonimo</span>
+                             )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-10">
@@ -273,6 +379,37 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal Conferma Anonimizzazione */}
+      {showGDPRModal && workerToAnon && (
+        <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] p-10 max-w-md w-full shadow-2xl border border-white text-center">
+            <div className="w-20 h-20 bg-accent/10 rounded-[32px] flex items-center justify-center text-accent mx-auto mb-6">
+               <AlertTriangle size={40} />
+            </div>
+            <h3 className="text-2xl font-black text-primary mb-4 tracking-tight">Conferma Anonimizzazione</h3>
+            <p className="text-gray-500 font-medium mb-8 leading-relaxed">
+              Stai per anonimizzare <strong>{workerToAnon.cognome} {workerToAnon.nome}</strong>.<br/>
+              Questa operazione è <strong>irreversibile</strong>. I dati identificativi saranno eliminati definitivamente secondo normativa GDPR.
+            </p>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => { setShowGDPRModal(false); setWorkerToAnon(null); }}
+                className="flex-1 py-4 text-[11px] font-black uppercase tracking-widest text-gray-400 hover:text-primary transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleAnonymize}
+                className="flex-[2] bg-accent text-white py-4 rounded-2xl font-black uppercase text-xs shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                Sì, Anonimizza Ora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

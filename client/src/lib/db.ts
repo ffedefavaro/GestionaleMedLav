@@ -1,6 +1,7 @@
 import initSqlJs, { type Database } from 'sql.js';
 import { get, del } from 'idb-keyval';
 import { loadEncryptedDB, saveEncryptedDB } from './auth';
+import CryptoJS from 'crypto-js';
 
 let db: Database | null = null;
 
@@ -337,4 +338,27 @@ export const runCommands = async (commands: { sql: string, params?: any[] }[]) =
     db!.run(cmd.sql, cmd.params);
   });
   await saveDB();
+};
+
+export const anonymizeWorker = async (workerId: number) => {
+  const worker = executeQuery("SELECT nome, cognome, codice_fiscale, email FROM workers WHERE id = ?", [workerId])[0];
+  if (!worker) throw new Error("Lavoratore non trovato");
+
+  const salt = CryptoJS.lib.WordArray.random(128 / 8).toString();
+  const hash = (text: string) => CryptoJS.SHA256(text + salt).toString().substring(0, 10).toUpperCase();
+
+  const anonNome = `ANON_${hash(worker.nome)}`;
+  const anonCognome = `ANON_${hash(worker.cognome)}`;
+  const anonCF = `ANON_${hash(worker.codice_fiscale)}`;
+  const anonEmail = worker.email ? `anon_${hash(worker.email)}@privacy.local` : null;
+
+  await runCommand(
+    "UPDATE workers SET nome = ?, cognome = ?, codice_fiscale = ?, email = ? WHERE id = ?",
+    [anonNome, anonCognome, anonCF, anonEmail, workerId]
+  );
+
+  await runCommand(
+    "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+    ["ANONYMIZE", "workers", workerId, `Anonimizzazione GDPR completata per il lavoratore ID ${workerId}`]
+  );
 };
