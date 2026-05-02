@@ -3,11 +3,11 @@ import {
   User, Mail, History, Database, Download, Upload, Trash2,
   Settings as SettingsIcon, AlertTriangle, ShieldCheck, RefreshCw, Send, Save
 } from 'lucide-react';
-import { executeQuery, runCommand, getDB } from '../lib/db';
-import { saveAs } from 'file-saver';
+import { executeQuery, runCommand } from '../lib/db';
 import { get, set, del } from 'idb-keyval';
 import { useAppStore } from '../store/useAppStore';
 import { checkEmailConfiguration, sendEmailViaGmail } from '../lib/emailService';
+import { performBackup, getBackupHistory, downloadBackup, runAutomaticBackup, type BackupMetadata } from '../lib/backupService';
 import type { EmailTemplate, EmailLog } from '../types';
 
 const Settings = () => {
@@ -21,11 +21,47 @@ const Settings = () => {
   });
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(false);
+  const [backupHistory, setBackupHistory] = useState<BackupMetadata[]>([]);
+  const [backupStatus, setBackupStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   useEffect(() => {
     fetchData();
     loadEmailConfig();
+    handleAutoBackup();
   }, []);
+
+  const handleAutoBackup = async () => {
+    try {
+      const meta = await runAutomaticBackup();
+      if (meta) {
+        setBackupStatus({
+          type: 'success',
+          message: `Backup automatico eseguito alle ${new Date(meta.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        });
+      }
+      const history = await getBackupHistory();
+      setBackupHistory(history);
+    } catch (e) {
+      setBackupStatus({ type: 'error', message: "Backup automatico fallito" });
+    }
+  };
+
+  const handleManualBackup = async () => {
+    setLoading(true);
+    try {
+      const meta = await performBackup();
+      setBackupStatus({
+        type: 'success',
+        message: `Backup eseguito alle ${new Date(meta.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      });
+      const history = await getBackupHistory();
+      setBackupHistory(history);
+    } catch (e) {
+      setBackupStatus({ type: 'error', message: "Backup manuale fallito" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadEmailConfig = async () => {
     const { configured, email } = await checkEmailConfiguration();
@@ -133,13 +169,6 @@ const Settings = () => {
     }
   };
 
-  const handleExportDB = () => {
-    const db = getDB();
-    if (!db) return;
-    const data = db.export();
-    const blob = new Blob([data.buffer as ArrayBuffer], { type: 'application/x-sqlite3' });
-    saveAs(blob, `cartsan_backup_${new Date().toISOString().split('T')[0]}.sqlite`);
-  };
 
   const handleImportDB = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -163,7 +192,22 @@ const Settings = () => {
   };
 
   return (
-    <div className="p-10 max-w-7xl mx-auto font-['DM_Sans']">
+    <div className="p-10 max-w-7xl mx-auto font-['DM_Sans'] relative">
+      {/* Backup Notifications */}
+      {backupStatus && (
+        <div className={`fixed top-10 right-10 z-[100] animate-in fade-in slide-in-from-top-4 duration-500`}>
+          <div className={`glass-card p-4 rounded-2xl flex items-center gap-4 shadow-2xl border-2 ${
+            backupStatus.type === 'success' ? 'border-tealAction/20 bg-white' : 'border-red-500/20 bg-red-50'
+          }`}>
+            <div className={`p-2 rounded-xl ${backupStatus.type === 'success' ? 'bg-tealAction/10 text-tealAction' : 'bg-red-500/10 text-red-500'}`}>
+              {backupStatus.type === 'success' ? <ShieldCheck size={20} /> : <AlertTriangle size={20} />}
+            </div>
+            <p className="text-sm font-black text-primary pr-4">{backupStatus.message}</p>
+            <button onClick={() => setBackupStatus(null)} className="text-gray-400 hover:text-primary"><Trash2 size={16} /></button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-10">
         <h1 className="text-4xl font-black text-primary tracking-tight">Impostazioni Sistema</h1>
         <p className="text-gray-500 font-medium mt-1">Configurazione legale e sicurezza dati</p>
@@ -408,9 +452,9 @@ const Settings = () => {
                 <h2 className="font-black uppercase tracking-tight text-xs">Gestione Dati</h2>
               </div>
               <div className="space-y-4">
-                <button onClick={handleExportDB} className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/10 transition-all">
-                  <span className="font-bold text-xs">Esporta Backup</span>
-                  <Download size={16} className="text-accent" />
+                <button onClick={handleManualBackup} disabled={loading} className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/10 transition-all">
+                  <span className="font-bold text-xs">Esegui Backup Ora</span>
+                  {loading ? <RefreshCw size={16} className="text-accent animate-spin" /> : <Download size={16} className="text-accent" />}
                 </button>
                 <label className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/10 transition-all cursor-pointer">
                   <span className="font-bold text-xs">Importa Database</span>
@@ -425,6 +469,40 @@ const Settings = () => {
               </div>
             </div>
             <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-accent/10 rounded-full blur-3xl" />
+          </div>
+
+          {/* Backup History */}
+          <div className="glass-card rounded-[40px] overflow-hidden border-2 border-primary/5">
+            <div className="p-8 bg-primary/5 border-b border-gray-100 flex items-center gap-4">
+              <div className="p-2 bg-primary/10 rounded-xl text-primary"><History size={20} /></div>
+              <div>
+                <h2 className="text-xs font-black text-primary uppercase tracking-widest">Cronologia Backup</h2>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Ultimi 7 salvataggi (24h)</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              {backupHistory.map((backup) => (
+                <div key={backup.id} className="flex items-center justify-between p-4 bg-warmWhite/50 rounded-2xl border border-gray-100 group hover:border-tealAction/30 transition-all">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-primary">
+                      {new Date(backup.timestamp).toLocaleDateString()} {new Date(backup.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-[9px] text-gray-400 font-bold">{(backup.size / 1024).toFixed(0)} KB</span>
+                  </div>
+                  <button
+                    onClick={() => downloadBackup(backup.id)}
+                    className="p-2 bg-white rounded-xl text-gray-400 hover:text-tealAction hover:shadow-lg transition-all"
+                  >
+                    <Download size={14} />
+                  </button>
+                </div>
+              ))}
+              {backupHistory.length === 0 && (
+                <div className="p-10 text-center">
+                  <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Nessun backup trovato</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

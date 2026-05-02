@@ -362,8 +362,11 @@ const runMigrations = (database: Database) => {
   migrations.forEach(m => {
     try {
       database.run(m);
-    } catch (e) {
+    } catch (e: any) {
       // Expected if column already exists
+      if (!e.message?.includes("duplicate column name") && !e.message?.includes("already exists")) {
+        console.warn(`Migration skipped: ${m}`, e.message);
+      }
     }
   });
 };

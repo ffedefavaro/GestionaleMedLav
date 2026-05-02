@@ -9,7 +9,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
-import { get } from 'idb-keyval';
+import { get, set } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
 import { useAppStore } from '../store/useAppStore';
 import { sendEmailViaGmail } from '../lib/emailService';
@@ -251,6 +251,27 @@ const NuovaVisita = () => {
     }
     return 0;
   }, [visitForm.peso, visitForm.altezza]);
+
+  const saveAnthroDefaults = async () => {
+    await set('default_altezza', visitForm.altezza);
+    await set('default_condizioni', visitForm.condizioni_generali);
+    alert("Impostazioni antropometriche salvate come default!");
+  };
+
+  useEffect(() => {
+    const loadAnthroDefaults = async () => {
+      const defH = await get('default_altezza') as number;
+      const defC = await get('default_condizioni') as Visit['condizioni_generali'];
+      if (defH || defC) {
+        setVisitForm(prev => ({
+          ...prev,
+          altezza: defH || prev.altezza,
+          condizioni_generali: defC || prev.condizioni_generali
+        }));
+      }
+    };
+    loadAnthroDefaults();
+  }, []);
 
   useEffect(() => {
     setVisitForm(prev => ({ ...prev, bmi }));
@@ -694,7 +715,7 @@ const NuovaVisita = () => {
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black uppercase tracking-widest text-primary/40">Dati Antropometrici</h3>
                 <button
-                  onClick={() => alert("Impostazioni salvate come default per le prossime visite.")}
+                  onClick={saveAnthroDefaults}
                   className="text-[9px] font-black text-amber-500 uppercase tracking-widest hover:underline"
                 >
                   Imposta come default
