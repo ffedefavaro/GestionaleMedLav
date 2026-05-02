@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import { initDB } from './lib/db';
 import { del } from 'idb-keyval';
+import { checkSession, logout } from './lib/auth';
 
 // Pages
+import Login from './pages/Login';
 import Aziende from './pages/Aziende';
 import Lavoratori from './pages/Lavoratori';
 import Protocolli from './pages/Protocolli';
@@ -18,47 +20,59 @@ import Dashboard from './pages/Dashboard';
 function App() {
   const [dbReady, setDbReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return sessionStorage.getItem('isLoggedIn') === 'true' && checkSession();
+  });
+
+  const startDB = useCallback(async () => {
+    try {
+      await initDB();
+      setDbReady(true);
+    } catch (err: unknown) {
+      console.error("App initialization error:", err);
+      const message = err instanceof Error ? err.message : "Errore sconosciuto";
+      setError(`Errore critico nell'inizializzazione del database: ${message}`);
+    }
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
+    if (isLoggedIn && !dbReady) {
+      startDB();
+    }
+  }, [isLoggedIn, dbReady, startDB]);
 
-    // Timeout di fallback di 5 secondi
-    const timeoutId = setTimeout(() => {
-      if (isMounted && !dbReady && !error) {
-        setError("Il caricamento sta impiegando più tempo del previsto. Verifica la connessione o prova a ricaricare.");
+  // Session check interval
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const interval = setInterval(() => {
+      if (!checkSession()) {
+        setIsLoggedIn(false);
       }
-    }, 5000);
+    }, 60000); // Check every minute
 
-    initDB()
-      .then(() => {
-        if (isMounted) {
-          setDbReady(true);
-          clearTimeout(timeoutId);
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          console.error("App initialization error:", err);
-          setError(`Errore critico nell'inizializzazione del database: ${err.message || "Errore sconosciuto"}`);
-          clearTimeout(timeoutId);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   const handleReset = () => {
     const confirmation = prompt("ATTENZIONE: Questa operazione cancellerà PERMANENTEMENTE tutti i dati locali. Per confermare, scrivi 'CANCELLA':");
     if (confirmation === 'CANCELLA') {
       localStorage.clear();
-      del('cartsan_db_v2').then(() => {
+      sessionStorage.clear();
+      logout();
+      Promise.all([
+        del('cartsan_db_v2'),
+        del('cartsan_db_encrypted'),
+        del('user_password_hash')
+      ]).then(() => {
         window.location.reload();
       });
     }
   };
+
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   if (error) {
     return (
