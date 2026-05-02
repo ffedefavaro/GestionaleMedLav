@@ -9,7 +9,7 @@ const mockDb = {
 };
 
 class MockDatabase {
-  constructor(data?: Uint8Array) {
+  constructor(_data?: Uint8Array) {
     return mockDb;
   }
 }
