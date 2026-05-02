@@ -136,6 +136,61 @@ const createTables = (database: Database) => {
       scadenza_prossima DATE,
       medico_id INTEGER,
       finalized INTEGER DEFAULT 0,
+
+      -- Dati Antropometrici
+      condizioni_generali TEXT DEFAULT 'Buone',
+      altezza INTEGER,
+      peso REAL,
+      bmi REAL,
+
+      -- Esame Obiettivo - Structured Fields
+      p_sistolica INTEGER,
+      p_diastolica INTEGER,
+      frequenza INTEGER,
+      eo_toni_puri INTEGER DEFAULT 1,
+      eo_toni_ritmici INTEGER DEFAULT 1,
+      eo_varici INTEGER DEFAULT 0,
+
+      eo_addome_piano INTEGER DEFAULT 1,
+      eo_trattabile INTEGER DEFAULT 1,
+      eo_dolente INTEGER DEFAULT 0,
+      eo_fegato_regolare INTEGER DEFAULT 1,
+      eo_milza_regolare INTEGER DEFAULT 1,
+
+      eo_giordano_dx TEXT DEFAULT 'Negativa',
+      eo_giordano_sx TEXT DEFAULT 'Negativa',
+
+      eo_pless_norma INTEGER DEFAULT 1,
+      eo_ispettivi_norma INTEGER DEFAULT 1,
+
+      eo_tinel TEXT DEFAULT 'Non eseguita',
+      eo_phalen TEXT DEFAULT 'Non eseguita',
+
+      eo_lasegue_dx TEXT DEFAULT 'Negativa',
+      eo_lasegue_sx TEXT DEFAULT 'Negativa',
+      eo_palpazione_paravertebrali TEXT DEFAULT 'Nessun dolore',
+      eo_digitopressione_apofisi TEXT DEFAULT 'Nessun dolore',
+      eo_rachide_rotazione TEXT DEFAULT 'Nella norma',
+      eo_rachide_inclinazione TEXT DEFAULT 'Nella norma',
+      eo_rachide_flessoestensione TEXT DEFAULT 'Nella norma',
+
+      eo_visus_nat_os REAL,
+      eo_visus_nat_od REAL,
+      eo_visus_corr_os REAL,
+      eo_visus_corr_od REAL,
+      eo_udito_ridotto INTEGER DEFAULT 0,
+
+      accertamenti_effettuati TEXT,
+      eo_note TEXT,
+
+      -- Footer / Nuovi campi
+      visita_completata INTEGER DEFAULT 0,
+      allegati_count INTEGER DEFAULT 0,
+      trasmissione_lavoratore_data DATE,
+      trasmissione_lavoratore_metodo TEXT,
+      trasmissione_datore_data DATE,
+      trasmissione_datore_metodo TEXT,
+
       FOREIGN KEY (worker_id) REFERENCES workers(id)
     );
 
@@ -147,6 +202,7 @@ const createTables = (database: Database) => {
       pressione_diastolica INTEGER,
       frequenza_cardiaca INTEGER,
       bmi REAL,
+      spo2 INTEGER,
       FOREIGN KEY (visit_id) REFERENCES visits(id)
     );
 
@@ -252,7 +308,49 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;",
-    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;"
+    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;",
+
+    // New migrations for structured EO
+    "ALTER TABLE visits ADD COLUMN condizioni_generali TEXT DEFAULT 'Buone';",
+    "ALTER TABLE visits ADD COLUMN altezza INTEGER;",
+    "ALTER TABLE visits ADD COLUMN peso REAL;",
+    "ALTER TABLE visits ADD COLUMN bmi REAL;",
+    "ALTER TABLE visits ADD COLUMN p_sistolica INTEGER;",
+    "ALTER TABLE visits ADD COLUMN p_diastolica INTEGER;",
+    "ALTER TABLE visits ADD COLUMN frequenza INTEGER;",
+    "ALTER TABLE visits ADD COLUMN eo_toni_puri INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_toni_ritmici INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_varici INTEGER DEFAULT 0;",
+    "ALTER TABLE visits ADD COLUMN eo_addome_piano INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_trattabile INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_dolente INTEGER DEFAULT 0;",
+    "ALTER TABLE visits ADD COLUMN eo_fegato_regolare INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_milza_regolare INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_giordano_dx TEXT DEFAULT 'Negativa';",
+    "ALTER TABLE visits ADD COLUMN eo_giordano_sx TEXT DEFAULT 'Negativa';",
+    "ALTER TABLE visits ADD COLUMN eo_pless_norma INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_ispettivi_norma INTEGER DEFAULT 1;",
+    "ALTER TABLE visits ADD COLUMN eo_tinel TEXT DEFAULT 'Non eseguita';",
+    "ALTER TABLE visits ADD COLUMN eo_phalen TEXT DEFAULT 'Non eseguita';",
+    "ALTER TABLE visits ADD COLUMN eo_lasegue_dx TEXT DEFAULT 'Negativa';",
+    "ALTER TABLE visits ADD COLUMN eo_lasegue_sx TEXT DEFAULT 'Negativa';",
+    "ALTER TABLE visits ADD COLUMN eo_palpazione_paravertebrali TEXT DEFAULT 'Nessun dolore';",
+    "ALTER TABLE visits ADD COLUMN eo_digitopressione_apofisi TEXT DEFAULT 'Nessun dolore';",
+    "ALTER TABLE visits ADD COLUMN eo_rachide_rotazione TEXT DEFAULT 'Nella norma';",
+    "ALTER TABLE visits ADD COLUMN eo_rachide_inclinazione TEXT DEFAULT 'Nella norma';",
+    "ALTER TABLE visits ADD COLUMN eo_rachide_flessoestensione TEXT DEFAULT 'Nella norma';",
+    "ALTER TABLE visits ADD COLUMN eo_visus_nat_os REAL;",
+    "ALTER TABLE visits ADD COLUMN eo_visus_nat_od REAL;",
+    "ALTER TABLE visits ADD COLUMN eo_visus_corr_os REAL;",
+    "ALTER TABLE visits ADD COLUMN eo_visus_corr_od REAL;",
+    "ALTER TABLE visits ADD COLUMN eo_udito_ridotto INTEGER DEFAULT 0;",
+    "ALTER TABLE visits ADD COLUMN eo_note TEXT;",
+    "ALTER TABLE visits ADD COLUMN visita_completata INTEGER DEFAULT 0;",
+    "ALTER TABLE visits ADD COLUMN allegati_count INTEGER DEFAULT 0;",
+    "ALTER TABLE visits ADD COLUMN trasmissione_lavoratore_data DATE;",
+    "ALTER TABLE visits ADD COLUMN trasmissione_lavoratore_metodo TEXT;",
+    "ALTER TABLE visits ADD COLUMN trasmissione_datore_data DATE;",
+    "ALTER TABLE visits ADD COLUMN trasmissione_datore_metodo TEXT;"
   ];
 
   migrations.forEach(m => {
