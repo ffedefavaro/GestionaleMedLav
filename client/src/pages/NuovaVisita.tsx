@@ -12,6 +12,10 @@ import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
 import type { Visit, Worker } from '../types';
 
+/**
+ * PATTERN GENERALE — COLLAPSE-TO-NORMAL
+ * Gestisce lo stato "Nella norma" (chiuso) e "Anomalia/Modificato" (espanso)
+ */
 interface CollapsibleCardProps {
   title: string;
   icon: React.ReactNode;
@@ -47,7 +51,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
                 ) : (
                   <>
                     <AlertTriangle size={12} className="text-amber-500" strokeWidth={3} />
-                    <span className="text-[11px] text-amber-600 font-bold uppercase tracking-tight">Anomalia rilevata / Modificato</span>
+                    <span className="text-[11px] text-amber-600 font-bold uppercase tracking-tight">Anomalia rilevata / Modificato (Stato Espanso)</span>
                   </>
                 )}
               </div>
@@ -655,7 +659,7 @@ const NuovaVisita = () => {
               </div>
             </div>
 
-            {/* EO Sections - Collapse-to-Normal */}
+            {/* EO Sections - Pattern Collapse-to-Normal */}
             <div className="space-y-4">
               {/* Cardiovascolare */}
               <CollapsibleCard
