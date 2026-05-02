@@ -5,6 +5,9 @@ interface AppState {
   toggleSidebar: () => void;
   currentTitle: string;
   setTitle: (title: string) => void;
+  isEmailConfigured: boolean;
+  senderEmail: string | null;
+  setEmailConfig: (configured: boolean, email: string | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -12,4 +15,7 @@ export const useAppStore = create<AppState>((set) => ({
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   currentTitle: 'Dashboard',
   setTitle: (title) => set({ currentTitle: title }),
+  isEmailConfigured: false,
+  senderEmail: null,
+  setEmailConfig: (configured, email) => set({ isEmailConfigured: configured, senderEmail: email }),
 }));

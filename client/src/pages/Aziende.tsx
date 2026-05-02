@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { Plus, Search, Edit2, Trash2, Building2, MapPin } from 'lucide-react';
+import type { Company } from '../types';
 
 const Aziende = () => {
-  const [aziende, setAziende] = useState<any[]>([]);
+  const [aziende, setAziende] = useState<Company[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
@@ -13,11 +14,12 @@ const Aziende = () => {
     sede_operativa: '',
     referente: '',
     rspp: '',
-    rls: ''
+    rls: '',
+    email: ''
   });
 
   const fetchAziende = () => {
-    const data = executeQuery("SELECT * FROM companies ORDER BY ragione_sociale ASC");
+    const data = executeQuery("SELECT * FROM companies ORDER BY ragione_sociale ASC") as Company[];
     setAziende(data);
   };
 
@@ -34,7 +36,7 @@ const Aziende = () => {
     }
   };
 
-  const handleEdit = (azienda: any) => {
+  const handleEdit = (azienda: Company) => {
     setFormData({
       ragione_sociale: azienda.ragione_sociale,
       p_iva: azienda.p_iva || '',
@@ -42,7 +44,8 @@ const Aziende = () => {
       sede_operativa: azienda.sede_operativa || '',
       referente: azienda.referente || '',
       rspp: azienda.rspp || '',
-      rls: azienda.rls || ''
+      rls: azienda.rls || '',
+      email: azienda.email || ''
     });
     setEditingId(azienda.id);
     setShowForm(true);
@@ -54,14 +57,14 @@ const Aziende = () => {
     e.preventDefault();
     if (editingId) {
       await runCommand(
-        `UPDATE companies SET ragione_sociale = ?, p_iva = ?, ateco = ?, sede_operativa = ?, referente = ?, rspp = ?, rls = ? WHERE id = ?`,
-        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls, editingId]
+        `UPDATE companies SET ragione_sociale = ?, p_iva = ?, ateco = ?, sede_operativa = ?, referente = ?, rspp = ?, rls = ?, email = ? WHERE id = ?`,
+        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls, formData.email, editingId]
       );
     } else {
       await runCommand(
-        `INSERT INTO companies (ragione_sociale, p_iva, ateco, sede_operativa, referente, rspp, rls)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls]
+        `INSERT INTO companies (ragione_sociale, p_iva, ateco, sede_operativa, referente, rspp, rls, email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [formData.ragione_sociale, formData.p_iva, formData.ateco, formData.sede_operativa, formData.referente, formData.rspp, formData.rls, formData.email]
       );
     }
 
@@ -71,13 +74,13 @@ const Aziende = () => {
 
     setShowForm(false);
     setEditingId(null);
-    setFormData({ ragione_sociale: '', p_iva: '', ateco: '', sede_operativa: '', referente: '', rspp: '', rls: '' });
+    setFormData({ ragione_sociale: '', p_iva: '', ateco: '', sede_operativa: '', referente: '', rspp: '', rls: '', email: '' });
     fetchAziende();
   };
 
   const filtered = aziende.filter(a =>
     a.ragione_sociale.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.p_iva.includes(searchTerm)
+    (a.p_iva && a.p_iva.includes(searchTerm))
   );
 
   return (
@@ -158,6 +161,15 @@ const Aziende = () => {
                   className="input-standard"
                   value={formData.rls}
                   onChange={e => setFormData({...formData, rls: e.target.value})}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email per comunicazioni</label>
+                <input
+                  type="email"
+                  className="input-standard"
+                  value={formData.email}
+                  onChange={e => setFormData({...formData, email: e.target.value})}
                 />
               </div>
             </div>

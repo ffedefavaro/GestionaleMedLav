@@ -9,6 +9,7 @@ export interface Company {
   referente?: string;
   rspp?: string;
   rls?: string;
+  email?: string;
 }
 
 export interface Worker {
@@ -28,6 +29,8 @@ export interface Worker {
   is_protocol_customized: boolean;
   custom_protocol?: string;
   protocol_override_reason?: string;
+  azienda?: string;
+  company_email?: string;
 }
 
 export interface Visit {
@@ -118,4 +121,36 @@ export interface Biometrics {
   pressione_diastolica: number;
   frequenza_cardiaca: number;
   spo2: number;
+}
+
+export interface DoctorProfile {
+  id: number;
+  nome: string;
+  specializzazione: string;
+  n_iscrizione: string;
+  timbro_immagine?: string;
+}
+
+export interface EmailLog {
+  id: number;
+  destinatario: string;
+  oggetto: string;
+  data_ora: string;
+  visit_id?: number;
+  esito: 'successo' | 'errore' | 'non inviato - email non configurata';
+  errore_dettaglio?: string;
+}
+
+export interface EmailTemplate {
+  tipo: 'reminder' | 'giudizio';
+  soggetto: string;
+  corpo: string;
+}
+
+export interface EmailConfig {
+  sender_email: string | null;
+  sender_name: string;
+  automatic_reminders: boolean;
+  reminder_template_id?: number;
+  judgment_template_id?: number;
 }

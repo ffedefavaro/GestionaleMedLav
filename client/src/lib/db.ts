@@ -350,7 +350,13 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN trasmissione_lavoratore_data DATE;",
     "ALTER TABLE visits ADD COLUMN trasmissione_lavoratore_metodo TEXT;",
     "ALTER TABLE visits ADD COLUMN trasmissione_datore_data DATE;",
-    "ALTER TABLE visits ADD COLUMN trasmissione_datore_metodo TEXT;"
+    "ALTER TABLE visits ADD COLUMN trasmissione_datore_metodo TEXT;",
+    "ALTER TABLE companies ADD COLUMN email TEXT;",
+
+    "CREATE TABLE IF NOT EXISTS email_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, destinatario TEXT, oggetto TEXT, data_ora DATETIME DEFAULT CURRENT_TIMESTAMP, visit_id INTEGER, esito TEXT, errore_dettaglio TEXT);",
+    "CREATE TABLE IF NOT EXISTS email_templates (tipo TEXT UNIQUE, soggetto TEXT, corpo TEXT);",
+    "INSERT OR IGNORE INTO email_templates (tipo, soggetto, corpo) VALUES ('reminder', 'Promemoria visita medica — {azienda}', 'Gentile {nome_lavoratore},\nLa informiamo che è prevista una visita di sorveglianza sanitaria in data {data_visita} presso {azienda}.\nLa preghiamo di presentarsi puntuale.\n\nCordiali saluti,\n{medico}');",
+    "INSERT OR IGNORE INTO email_templates (tipo, soggetto, corpo) VALUES ('giudizio', 'Giudizio di Idoneità — {azienda}', 'Gentile {nome_lavoratore},\nIn allegato il giudizio di idoneità relativo alla visita del {data_visita}.\n\nCordiali saluti,\n{medico}');"
   ];
 
   migrations.forEach(m => {

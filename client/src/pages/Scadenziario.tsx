@@ -6,22 +6,30 @@ import {
   ChevronRight, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { isAfter, isBefore, addDays } from 'date-fns';
+import { processAutomaticReminders } from '../lib/emailService';
+import type { Visit } from '../types';
 
 const Scadenziario = () => {
-  const [visite, setVisite] = useState<any[]>([]);
+  const [visite, setVisite] = useState<(Visit & { nome: string, cognome: string, azienda: string, mansione: string, codice_fiscale: string })[]>([]);
   const [filter, setFilter] = useState('all'); // all, expired, upcoming
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const data = executeQuery(`
-      SELECT visits.id, visits.data_visita, visits.scadenza_prossima, visits.giudizio,
-             workers.nome, workers.cognome, workers.codice_fiscale, companies.ragione_sociale as azienda, workers.mansione
-      FROM visits
-      JOIN workers ON visits.worker_id = workers.id
-      JOIN companies ON workers.company_id = companies.id
-      ORDER BY visits.scadenza_prossima ASC
-    `);
-    setVisite(data);
+    const fetchData = async () => {
+      const data = executeQuery(`
+        SELECT visits.id, visits.data_visita, visits.scadenza_prossima, visits.giudizio,
+               workers.nome, workers.cognome, workers.codice_fiscale, companies.ragione_sociale as azienda, workers.mansione
+        FROM visits
+        JOIN workers ON visits.worker_id = workers.id
+        JOIN companies ON workers.company_id = companies.id
+        ORDER BY visits.scadenza_prossima ASC
+      `);
+      setVisite(data);
+
+      // Trigger automatic reminders on app open
+      await processAutomaticReminders();
+    };
+    fetchData();
   }, []);
 
   const today = new Date();

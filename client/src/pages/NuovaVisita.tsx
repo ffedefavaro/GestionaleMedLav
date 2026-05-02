@@ -3,19 +3,19 @@ import { executeQuery, runCommand } from '../lib/db';
 import {
   User, Clipboard, Activity, CheckCircle, Mail, RefreshCw,
   Heart, Wind, Stethoscope, Eye, Ear, Brain,
-  ChevronDown, ChevronUp, Check, AlertTriangle, FileText, Send, Save, Printer, Copy, X
+  ChevronDown, ChevronUp, Check, AlertTriangle, FileText, Send, Save, Printer, Copy, X,
+  ExternalLink, FileCheck
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
-import type { Visit, Worker } from '../types';
+import { useAppStore } from '../store/useAppStore';
+import { sendEmailViaGmail } from '../lib/emailService';
+import type { Visit, Worker, EmailTemplate, DoctorProfile } from '../types';
+import { Link } from 'react-router-dom';
 
-/**
- * PATTERN GENERALE — COLLAPSE-TO-NORMAL
- * Gestisce lo stato "Nella norma" (chiuso) e "Anomalia/Modificato" (espanso)
- */
 interface CollapsibleCardProps {
   title: string;
   icon: React.ReactNode;
@@ -95,6 +95,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
 };
 
 const NuovaVisita = () => {
+  const { isEmailConfigured } = useAppStore();
   const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [workerData, setWorkerData] = useState<Worker | null>(null);
@@ -105,6 +106,13 @@ const NuovaVisita = () => {
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
   const [loadingGmail, setLoadingGmail] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  // Email Dialog State
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailPreview, setEmailPreview] = useState({ soggetto: '', corpo: '', workerEmail: '', companyEmail: '' });
+  const [sendToWorker, setSendToWorker] = useState(true);
+  const [sendToCompany, setSendToCompany] = useState(true);
+  const [isSending, setIsSending] = useState(false);
 
   const defaultVisitState: Partial<Visit> = {
     data_visita: new Date().toISOString().split('T')[0],
@@ -179,10 +187,10 @@ const NuovaVisita = () => {
 
   const fetchWorkers = () => {
     const data = executeQuery(`
-      SELECT workers.*, companies.ragione_sociale as azienda
+      SELECT workers.*, companies.ragione_sociale as azienda, companies.email as company_email
       FROM workers
       JOIN companies ON workers.company_id = companies.id
-    `);
+    `) as Worker[];
     setLavoratori(data);
   };
 
@@ -192,20 +200,22 @@ const NuovaVisita = () => {
       if (data) {
         setWorkerData(data);
 
-        const fullWorker = executeQuery(`
+        const fullWorkerResults = executeQuery(`
           SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
           FROM workers
           LEFT JOIN protocols ON workers.protocol_id = protocols.id
           WHERE workers.id = ?
-        `, [selectedWorkerId])[0];
+        `, [selectedWorkerId]);
+
+        const fullWorker = fullWorkerResults[0] as (Worker & { protocol_periodicity: number });
 
         if (fullWorker) {
           let months = fullWorker.protocol_periodicity || 12;
           if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
             try {
-              const customExams = JSON.parse(fullWorker.custom_protocol);
+              const customExams = JSON.parse(fullWorker.custom_protocol) as { periodicita: number }[];
               if (customExams.length > 0) {
-                months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+                months = Math.min(...customExams.map((e) => e.periodicita || 12));
               }
             } catch (e) {
               console.error("Error parsing custom protocol", e);
@@ -262,7 +272,7 @@ const NuovaVisita = () => {
   const isVisusHearingNormal = visitForm.eo_visus_nat_os === 10 && visitForm.eo_visus_nat_od === 10 && visitForm.eo_visus_corr_os === 10 && visitForm.eo_visus_corr_od === 10 && !visitForm.eo_udito_ridotto;
 
   const handleAuthAndFetch = async () => {
-    const clientId = await get('google_client_id');
+    const clientId = await get('google_client_id') as string;
     if (!clientId) {
       alert("Configura il Client ID nelle impostazioni prima di usare Gmail.");
       return;
@@ -270,10 +280,11 @@ const NuovaVisita = () => {
 
     setLoadingGmail(true);
     try {
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
+      const gapi = (window as any).google;
+      const client = gapi.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        callback: async (response: any) => {
+        callback: async (response: { access_token: string }) => {
           if (response.access_token) {
             setAccessToken(response.access_token);
             const msgs = await fetchGmailMessages(response.access_token, workerData?.email || '');
@@ -303,7 +314,7 @@ const NuovaVisita = () => {
 
     setVisitForm(prev => ({
       ...prev,
-      anamnesi_patologica: prev.anamnesi_patologica + (prev.anamnesi_patologica ? "\n\n" : "") + textToImport
+      anamnesi_patologica: (prev.anamnesi_patologica || '') + (prev.anamnesi_patologica ? "\n\n" : "") + textToImport
     }));
     alert("Testo e allegati importati in Anamnesi Patologica!");
   };
@@ -352,21 +363,103 @@ const NuovaVisita = () => {
 
     await runCommand(query, params);
 
-    const lastVisitData = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
+    const lastVisitId = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0].id as number;
     await runCommand(
       "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
-      ["FINALIZE", "visits", lastVisitData.id, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
+      ["FINALIZE", "visits", lastVisitId, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
     );
 
     alert("Visita salvata con successo!");
-    generatePDF();
-    setStep(1);
-    setSelectedWorkerId('');
+
+    if (isEmailConfigured && visitForm.giudizio) {
+      await prepareEmail();
+    } else {
+      generatePDFs();
+      setStep(1);
+      setSelectedWorkerId('');
+    }
   };
 
-  const generatePDF = () => {
-    if (!workerData) return;
-    const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
+  const prepareEmail = async () => {
+    const template = executeQuery("SELECT * FROM email_templates WHERE tipo = 'giudizio'")[0] as EmailTemplate;
+    const senderName = await get('sender_name') as string || "Medico Competente";
+
+    if (!template || !workerData) return;
+
+    const corpo = template.corpo
+      .replace('{nome_lavoratore}', `${workerData.nome} ${workerData.cognome}`)
+      .replace('{data_visita}', visitForm.data_visita || '')
+      .replace('{azienda}', workerData.azienda || '')
+      .replace('{giudizio}', visitForm.giudizio?.toUpperCase() || '')
+      .replace('{medico}', senderName);
+
+    const soggetto = template.soggetto.replace('{azienda}', workerData.azienda || '');
+
+    setEmailPreview({
+      soggetto,
+      corpo,
+      workerEmail: workerData.email || '',
+      companyEmail: workerData.company_email || ''
+    });
+    setShowEmailDialog(true);
+  };
+
+  const handleSendEmails = async () => {
+    setIsSending(true);
+    const lastVisitId = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0].id as number;
+
+    // Generate the judgment PDF to be attached
+    const { giudizioDoc } = generatePDFs(false);
+    // Convert PDF to base64 for Gmail attachment
+    const pdfBase64 = giudizioDoc.output('datauristring').split(',')[1];
+
+    if (sendToWorker && emailPreview.workerEmail) {
+      await sendEmailViaGmail(
+        emailPreview.workerEmail,
+        emailPreview.soggetto,
+        emailPreview.corpo,
+        lastVisitId,
+        {
+          filename: `Giudizio_${workerData?.cognome}_${visitForm.data_visita}.pdf`,
+          content: pdfBase64,
+          type: 'application/pdf'
+        }
+      );
+      await runCommand(
+        "UPDATE visits SET trasmissione_lavoratore_data = ?, trasmissione_lavoratore_metodo = 'Email' WHERE id = ?",
+        [new Date().toISOString().split('T')[0], lastVisitId]
+      );
+    }
+
+    if (sendToCompany && emailPreview.companyEmail) {
+      await sendEmailViaGmail(
+        emailPreview.companyEmail,
+        emailPreview.soggetto,
+        emailPreview.corpo,
+        lastVisitId,
+        {
+          filename: `Giudizio_${workerData?.cognome}_${visitForm.data_visita}.pdf`,
+          content: pdfBase64,
+          type: 'application/pdf'
+        }
+      );
+      await runCommand(
+        "UPDATE visits SET trasmissione_datore_data = ?, trasmissione_datore_metodo = 'Email' WHERE id = ?",
+        [new Date().toISOString().split('T')[0], lastVisitId]
+      );
+    }
+
+    setIsSending(false);
+    setShowEmailDialog(false);
+    setStep(1);
+    setSelectedWorkerId('');
+    alert("Comunicazioni inviate e visita completata!");
+  };
+
+  const generatePDFs = (save: boolean = true) => {
+    if (!workerData) return { giudizioDoc: new jsPDF(), cartellaDoc: new jsPDF() };
+    const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
+    const doctorData = doctorDataResults[0] as DoctorProfile || { nome: '', specializzazione: '', n_iscrizione: '' };
     const doc = new jsPDF();
 
     // Standard PDF Generation (Giudizio di Idoneità)
@@ -379,7 +472,7 @@ const NuovaVisita = () => {
     doc.rect(15, 35, 180, 45);
     doc.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 45);
     doc.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${(workerData as any).azienda}`, 20, 57);
+    doc.text(`Azienda: ${workerData.azienda}`, 20, 57);
     doc.text(`Mansione: ${workerData.mansione}`, 20, 63);
     doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
     doc.text(`Tipo Visita: ${visitForm.tipo_visita?.toUpperCase()}`, 20, 75);
@@ -405,7 +498,7 @@ const NuovaVisita = () => {
     doc.line(130, signatureY + 14, 190, signatureY + 14);
     doc.text("Firma del Medico Competente", 135, signatureY + 19);
 
-    doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+    if (save) doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
 
     // Extended Cartella Sanitaria (Allegato 3A)
     const cartella = new jsPDF();
@@ -418,7 +511,7 @@ const NuovaVisita = () => {
     cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
     cartella.setFont("helvetica", "normal");
     cartella.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 47);
-    cartella.text(`Azienda: ${(workerData as any).azienda} | Mansione: ${workerData.mansione}`, 20, 53);
+    cartella.text(`Azienda: ${workerData.azienda} | Mansione: ${workerData.mansione}`, 20, 53);
 
     cartella.setFont("helvetica", "bold");
     cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
@@ -464,7 +557,9 @@ const NuovaVisita = () => {
        addEOSection("Accertamenti Strumentali", visitForm.accertamenti_effettuati);
     }
 
-    cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+    if (save) cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+
+    return { giudizioDoc: doc, cartellaDoc: cartella };
   };
 
   return (
@@ -515,7 +610,7 @@ const NuovaVisita = () => {
             {workerData && (
               <div className="bg-tealAction/5 p-6 rounded-3xl border border-tealAction/10 flex justify-between items-center group hover:bg-tealAction/10 transition-colors">
                 <div>
-                  <p className="text-tealAction font-black text-lg uppercase tracking-tight">{(workerData as any).azienda}</p>
+                  <p className="text-tealAction font-black text-lg uppercase tracking-tight">{workerData.azienda}</p>
                   <p className="text-gray-500 font-bold text-sm">Mansione: <span className="text-primary font-black">{workerData.mansione}</span></p>
                 </div>
                 <div className="flex gap-4">
@@ -613,7 +708,7 @@ const NuovaVisita = () => {
                     {['Buone', 'Discrete', 'Scadenti'].map((opt) => (
                       <button
                         key={opt}
-                        onClick={() => setVisitForm({ ...visitForm, condizioni_generali: opt as any })}
+                        onClick={() => setVisitForm({ ...visitForm, condizioni_generali: opt as Visit['condizioni_generali'] })}
                         className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${
                           visitForm.condizioni_generali === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-primary/40 hover:bg-white'
                         }`}
@@ -723,16 +818,16 @@ const NuovaVisita = () => {
               >
                 <div className="flex flex-wrap gap-6">
                   {[
-                    { id: 'eo_addome_piano', label: 'Addome piano' },
-                    { id: 'eo_trattabile', label: 'Trattabile' },
-                    { id: 'eo_dolente', label: 'Dolente', warning: true },
-                    { id: 'eo_fegato_regolare', label: 'Fegato regolare' },
-                    { id: 'eo_milza_regolare', label: 'Milza regolare' }
+                    { id: 'eo_addome_piano' as keyof Visit, label: 'Addome piano' },
+                    { id: 'eo_trattabile' as keyof Visit, label: 'Trattabile' },
+                    { id: 'eo_dolente' as keyof Visit, label: 'Dolente', warning: true },
+                    { id: 'eo_fegato_regolare' as keyof Visit, label: 'Fegato regolare' },
+                    { id: 'eo_milza_regolare' as keyof Visit, label: 'Milza regolare' }
                   ].map(f => (
                     <label key={f.id} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={!!(visitForm as any)[f.id]} onChange={e => setVisitForm({...visitForm, [f.id]: e.target.checked})} className="hidden" />
-                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${(visitForm as any)[f.id] ? (f.warning ? 'bg-amber-500 border-amber-500' : 'bg-tealAction border-tealAction') : 'border-gray-200 bg-white'}`}>
-                        {(visitForm as any)[f.id] && <Check size={14} className="text-white" strokeWidth={4} />}
+                      <input type="checkbox" checked={!!visitForm[f.id]} onChange={e => setVisitForm({...visitForm, [f.id]: e.target.checked})} className="hidden" />
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${visitForm[f.id] ? (f.warning ? 'bg-amber-500 border-amber-500' : 'bg-tealAction border-tealAction') : 'border-gray-200 bg-white'}`}>
+                        {visitForm[f.id] && <Check size={14} className="text-white" strokeWidth={4} />}
                       </div>
                       <span className="text-xs font-bold text-primary/70">{f.label}</span>
                     </label>
@@ -754,10 +849,10 @@ const NuovaVisita = () => {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Giordano DX</label>
                     <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                      {['Negativa', 'Positiva'].map((opt) => (
+                      {(['Negativa', 'Positiva'] as Visit['eo_giordano_dx'][]).map((opt) => (
                         <button
                           key={opt}
-                          onClick={() => setVisitForm({ ...visitForm, eo_giordano_dx: opt as any })}
+                          onClick={() => setVisitForm({ ...visitForm, eo_giordano_dx: opt })}
                           className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${
                             visitForm.eo_giordano_dx === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'
                           }`}
@@ -770,10 +865,10 @@ const NuovaVisita = () => {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Giordano SX</label>
                     <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                      {['Negativa', 'Positiva'].map((opt) => (
+                      {(['Negativa', 'Positiva'] as Visit['eo_giordano_sx'][]).map((opt) => (
                         <button
                           key={opt}
-                          onClick={() => setVisitForm({ ...visitForm, eo_giordano_sx: opt as any })}
+                          onClick={() => setVisitForm({ ...visitForm, eo_giordano_sx: opt })}
                           className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${
                             visitForm.eo_giordano_sx === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'
                           }`}
@@ -829,10 +924,10 @@ const NuovaVisita = () => {
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Test di Tinel</label>
                       <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                        {['Non eseguita', 'Negativa', 'Positiva'].map((opt) => (
+                        {(['Non eseguita', 'Negativa', 'Positiva'] as Visit['eo_tinel'][]).map((opt) => (
                           <button
                             key={opt}
-                            onClick={() => setVisitForm({ ...visitForm, eo_tinel: opt as any })}
+                            onClick={() => setVisitForm({ ...visitForm, eo_tinel: opt })}
                             className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${
                               visitForm.eo_tinel === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'
                             }`}
@@ -845,10 +940,10 @@ const NuovaVisita = () => {
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Test di Phalen</label>
                       <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                        {['Non eseguita', 'Negativa', 'Positiva'].map((opt) => (
+                        {(['Non eseguita', 'Negativa', 'Positiva'] as Visit['eo_phalen'][]).map((opt) => (
                           <button
                             key={opt}
-                            onClick={() => setVisitForm({ ...visitForm, eo_phalen: opt as any })}
+                            onClick={() => setVisitForm({ ...visitForm, eo_phalen: opt })}
                             className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${
                               visitForm.eo_phalen === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'
                             }`}
@@ -886,16 +981,16 @@ const NuovaVisita = () => {
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lasègue DX</label>
                       <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                        {['Negativa', 'Positiva'].map((opt) => (
-                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_lasegue_dx: opt as any })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_lasegue_dx === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
+                        {(['Negativa', 'Positiva'] as Visit['eo_lasegue_dx'][]).map((opt) => (
+                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_lasegue_dx: opt })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_lasegue_dx === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
                         ))}
                       </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lasègue SX</label>
                       <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                        {['Negativa', 'Positiva'].map((opt) => (
-                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_lasegue_sx: opt as any })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_lasegue_sx === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
+                        {(['Negativa', 'Positiva'] as Visit['eo_lasegue_sx'][]).map((opt) => (
+                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_lasegue_sx: opt })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_lasegue_sx === opt ? (opt === 'Positiva' ? 'bg-amber-500 text-white shadow-lg' : 'bg-primary text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
                         ))}
                       </div>
                     </div>
@@ -905,16 +1000,16 @@ const NuovaVisita = () => {
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Palpazione Paravertebrali</label>
                       <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                        {['Nessun dolore', 'Dolorabile', 'Dolente'].map((opt) => (
-                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_palpazione_paravertebrali: opt as any })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_palpazione_paravertebrali === opt ? (opt === 'Nessun dolore' ? 'bg-primary text-white shadow-lg' : 'bg-amber-500 text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
+                        {(['Nessun dolore', 'Dolorabile', 'Dolente'] as Visit['eo_palpazione_paravertebrali'][]).map((opt) => (
+                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_palpazione_paravertebrali: opt })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_palpazione_paravertebrali === opt ? (opt === 'Nessun dolore' ? 'bg-primary text-white shadow-lg' : 'bg-amber-500 text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
                         ))}
                       </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Digitopressione Apofisi</label>
                       <div className="flex gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100">
-                        {['Nessun dolore', 'Dolorabile', 'Dolente'].map((opt) => (
-                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_digitopressione_apofisi: opt as any })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_digitopressione_apofisi === opt ? (opt === 'Nessun dolore' ? 'bg-primary text-white shadow-lg' : 'bg-amber-500 text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
+                        {(['Nessun dolore', 'Dolorabile', 'Dolente'] as Visit['eo_digitopressione_apofisi'][]).map((opt) => (
+                          <button key={opt} onClick={() => setVisitForm({ ...visitForm, eo_digitopressione_apofisi: opt })} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${visitForm.eo_digitopressione_apofisi === opt ? (opt === 'Nessun dolore' ? 'bg-primary text-white shadow-lg' : 'bg-amber-500 text-white shadow-lg') : 'text-primary/40 hover:bg-white'}`}>{opt}</button>
                         ))}
                       </div>
                     </div>
@@ -923,22 +1018,25 @@ const NuovaVisita = () => {
                   <div className="space-y-4">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Mobilità Rachide</label>
                     <div className="grid grid-cols-1 gap-4">
-                      {['Rotazione', 'Inclinazione', 'Flessoestensione'].map((axis) => (
-                        <div key={axis} className="flex items-center justify-between bg-warmWhite/30 p-3 rounded-2xl border border-gray-100">
-                          <span className="text-xs font-bold text-primary/60 ml-2">{axis}</span>
-                          <div className="flex gap-1 bg-white p-1 rounded-xl shadow-sm">
-                            {['Nella norma', 'Lievemente ridotta', 'Ridotta'].map((opt) => (
-                              <button
-                                key={opt}
-                                onClick={() => setVisitForm({ ...visitForm, [`eo_rachide_${axis.toLowerCase()}` as any]: opt as any })}
-                                className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-tighter rounded-lg transition-all ${visitForm[`eo_rachide_${axis.toLowerCase()}` as keyof Partial<Visit>] === opt ? 'bg-primary text-white' : 'text-primary/40 hover:bg-primary/5'}`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
+                      {(['Rotazione', 'Inclinazione', 'Flessoestensione'] as const).map((axis) => {
+                        const fieldName = `eo_rachide_${axis.toLowerCase()}` as keyof Visit;
+                        return (
+                          <div key={axis} className="flex items-center justify-between bg-warmWhite/30 p-3 rounded-2xl border border-gray-100">
+                            <span className="text-xs font-bold text-primary/60 ml-2">{axis}</span>
+                            <div className="flex gap-1 bg-white p-1 rounded-xl shadow-sm">
+                              {(['Nella norma', 'Lievemente ridotta', 'Ridotta'] as const).map((opt) => (
+                                <button
+                                  key={opt}
+                                  onClick={() => setVisitForm({ ...visitForm, [fieldName]: opt })}
+                                  className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-tighter rounded-lg transition-all ${visitForm[fieldName] === opt ? 'bg-primary text-white' : 'text-primary/40 hover:bg-primary/5'}`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1028,6 +1126,22 @@ const NuovaVisita = () => {
               <h2 className="text-2xl font-black tracking-tight">Giudizio Finale</h2>
             </div>
 
+            {/* Banner for Email Configuration */}
+            {!isEmailConfigured && (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-8 flex items-center justify-between gap-6 animate-in slide-in-from-top-4 duration-500">
+                <div className="flex items-center gap-4">
+                  <div className="p-4 bg-amber-100 rounded-2xl text-amber-600"><AlertTriangle size={32} /></div>
+                  <div>
+                    <h3 className="text-amber-900 font-black uppercase tracking-tight">Invio giudizio disattivato</h3>
+                    <p className="text-amber-800 text-sm font-medium mt-1">Configura l'email nelle impostazioni per inviare il giudizio automaticamente a lavoratore e datore.</p>
+                  </div>
+                </div>
+                <Link to="/settings" className="px-8 py-4 bg-amber-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-amber-700 transition-all flex items-center gap-3 shadow-lg shadow-amber-600/20">
+                  Vai alle Impostazioni <ExternalLink size={18} />
+                </Link>
+              </div>
+            )}
+
             <div className="bg-accent/5 p-8 rounded-[40px] border border-accent/10 space-y-10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="flex flex-col gap-2">
@@ -1081,7 +1195,7 @@ const NuovaVisita = () => {
                                <option value="App">App</option>
                             </select>
                          </div>
-                         <div className="flex items-center gap-3 bg-warmWhite/80 px-4 py-2 rounded-2xl border border-gray-50">
+                         <div className="flex items-center gap-3 bg-warmWhite/80 px-4 py-2 rounded-2xl border border-gray-100">
                             <Send size={14} className="text-primary/40" />
                             <span>Datore:</span>
                             <input type="date" className="bg-transparent text-primary font-black outline-none" value={visitForm.trasmissione_datore_data} onChange={e => setVisitForm({...visitForm, trasmissione_datore_data: e.target.value})} />
@@ -1104,7 +1218,7 @@ const NuovaVisita = () => {
               <div className="flex items-center gap-3">
                 <button onClick={() => alert("Visita duplicata.")} className="p-4 text-primary/40 hover:text-primary transition-colors" title="Duplica Visita"><Copy size={20} /></button>
                 <button onClick={() => { setStep(1); setSelectedWorkerId(''); }} className="p-4 text-red-400 hover:text-red-500 transition-colors" title="Annulla"><X size={20} /></button>
-                <button onClick={generatePDF} className="flex items-center gap-2 px-6 py-4 border-2 border-primary/10 rounded-2xl text-primary font-black uppercase text-[10px] tracking-widest hover:bg-primary/5 transition-all">
+                <button onClick={() => generatePDFs()} className="flex items-center gap-2 px-6 py-4 border-2 border-primary/10 rounded-2xl text-primary font-black uppercase text-[10px] tracking-widest hover:bg-primary/5 transition-all">
                   <Printer size={18} /> Stampa PDF
                 </button>
                 <button onClick={handleSave} className="btn-accent px-10 py-4 flex items-center gap-3 shadow-2xl shadow-accent/20">
@@ -1115,6 +1229,80 @@ const NuovaVisita = () => {
           </div>
         )}
       </div>
+
+      {/* Email Send Dialog */}
+      {showEmailDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-primary/20 backdrop-blur-md">
+           <div className="bg-white rounded-[40px] max-w-2xl w-full p-10 shadow-2xl border-2 border-primary/5 animate-in zoom-in duration-300">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-4 bg-tealAction/10 rounded-2xl text-tealAction"><Mail size={32} /></div>
+                <div>
+                  <h2 className="text-2xl font-black text-primary uppercase tracking-tight">Invio Giudizio Idoneità</h2>
+                  <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Anteprima Comunicazione Digitale</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-warmWhite/50 p-6 rounded-3xl border border-gray-100 space-y-4">
+                  <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest w-20">Oggetto:</span>
+                    <span className="text-sm font-black text-primary">{emailPreview.soggetto}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Corpo Messaggio:</span>
+                    <div className="text-sm font-medium text-gray-600 whitespace-pre-wrap leading-relaxed bg-white p-4 rounded-xl border border-gray-100 max-h-48 overflow-y-auto">
+                      {emailPreview.corpo}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-tealAction bg-tealAction/5 p-3 rounded-xl border border-tealAction/10">
+                    <FileCheck size={16} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Documento allegato: Giudizio_Idoneità.pdf</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer ${sendToWorker ? 'border-primary bg-primary/5 shadow-lg' : 'border-gray-100 hover:border-primary/20'}`}>
+                    <input type="checkbox" className="hidden" checked={sendToWorker} onChange={e => setSendToWorker(e.target.checked)} />
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center ${sendToWorker ? 'bg-primary border-primary' : 'border-gray-200'}`}>
+                      {sendToWorker && <Check size={16} className="text-white" strokeWidth={4} />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase tracking-tight text-primary">Invia al Lavoratore</span>
+                      <span className="text-[9px] font-bold text-gray-400 truncate w-40">{emailPreview.workerEmail}</span>
+                    </div>
+                  </label>
+                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer ${sendToCompany ? 'border-primary bg-primary/5 shadow-lg' : 'border-gray-100 hover:border-primary/20'}`}>
+                    <input type="checkbox" className="hidden" checked={sendToCompany} onChange={e => setSendToCompany(e.target.checked)} />
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center ${sendToCompany ? 'bg-primary border-primary' : 'border-gray-200'}`}>
+                      {sendToCompany && <Check size={16} className="text-white" strokeWidth={4} />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase tracking-tight text-primary">Invia al Datore</span>
+                      <span className="text-[9px] font-bold text-gray-400 truncate w-40">{emailPreview.companyEmail}</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-10 flex gap-4">
+                <button
+                  onClick={() => { setShowEmailDialog(false); generatePDFs(); setStep(1); setSelectedWorkerId(''); }}
+                  className="flex-1 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-primary transition-colors"
+                >
+                  Solo Stampa (Salta Invio)
+                </button>
+                <button
+                  disabled={isSending || (!sendToWorker && !sendToCompany)}
+                  onClick={handleSendEmails}
+                  className="flex-[2] btn-accent py-5 flex items-center justify-center gap-3 shadow-2xl shadow-accent/20"
+                >
+                  {isSending ? <RefreshCw className="animate-spin" size={20} /> : <Send size={20} />}
+                  {isSending ? 'Invio in corso...' : 'Invia e Finalizza'}
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
