@@ -1,5 +1,6 @@
 import initSqlJs, { type Database } from 'sql.js';
-import { get, set } from 'idb-keyval';
+import { get, del } from 'idb-keyval';
+import { loadEncryptedDB, saveEncryptedDB } from './auth';
 
 let db: Database | null = null;
 
@@ -19,16 +20,29 @@ export const initDB = async () => {
       }
     });
 
-    console.log("Recupero dati da IndexedDB...");
-    let savedData;
+    console.log("Recupero dati da IndexedDB (Cifrati)...");
+    let savedData: Uint8Array | null = null;
     try {
-      savedData = await get('cartsan_db_v2');
+      savedData = await loadEncryptedDB();
+
+      // Legacy Migration
+      if (!savedData) {
+        const legacyData = await get('cartsan_db_v2');
+        if (legacyData) {
+          console.log("Migrazione dati legacy non cifrati...");
+          savedData = legacyData;
+          // Save immediately as encrypted
+          await saveEncryptedDB(legacyData);
+          // Cleanup legacy
+          await del('cartsan_db_v2');
+        }
+      }
     } catch (e) {
-      console.error("Errore nel recupero da IndexedDB:", e);
+      console.error("Errore nel recupero/decifratura database:", e);
     }
 
     if (savedData) {
-      console.log("Database esistente trovato.");
+      console.log("Database esistente caricato.");
       try {
         db = new SQL.Database(savedData);
       } catch (e) {
@@ -267,7 +281,7 @@ const runMigrations = (database: Database) => {
 export const saveDB = async () => {
   if (!db) return;
   const data = db.export();
-  await set('cartsan_db_v2', data);
+  await saveEncryptedDB(data);
 };
 
 export const getDB = () => db;
