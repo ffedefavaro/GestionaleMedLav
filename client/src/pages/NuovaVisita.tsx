@@ -7,7 +7,7 @@ import {
   ExternalLink, FileCheck, Baby, Cigarette, Beer, Dumbbell, Utensils, Moon,
   Plus, Trash2, Factory, AlertCircle, ChevronRight
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { generateCompletePDF } from '../lib/pdfGenerator';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get, set } from 'idb-keyval';
@@ -17,7 +17,7 @@ import { sendEmailViaGmail } from '../lib/emailService';
 import type {
   Visit, Worker, EmailTemplate, DoctorProfile,
   FamilyMemberHistory, FamilyHistory, PhysiologicalHistory,
-  WorkHistory
+  WorkHistory, Company
 } from '../types';
 import { Link } from 'react-router-dom';
 
@@ -222,6 +222,9 @@ const NuovaVisita = () => {
   const [sendToWorker, setSendToWorker] = useState(true);
   const [sendToCompany, setSendToCompany] = useState(true);
   const [isSending, setIsSending] = useState(false);
+
+  // Print Dialog State
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
 
   const defaultVisitState: Partial<Visit> = {
     data_visita: new Date().toISOString().split('T')[0],
@@ -519,7 +522,7 @@ const NuovaVisita = () => {
     if (isEmailConfigured && visitForm.giudizio) {
       await prepareEmail();
     } else {
-      generatePDFs();
+      generatePDF('judgment');
       setStep(1);
       setSelectedWorkerId('');
     }
@@ -553,10 +556,25 @@ const NuovaVisita = () => {
     setIsSending(true);
     const lastVisitId = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0].id as number;
 
+    // Get full context data for PDF
+    const doctor = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] as DoctorProfile || { nome: '', specializzazione: '', n_iscrizione: '' };
+    const company = executeQuery("SELECT * FROM companies WHERE id = ?", [workerData?.company_id])[0] as Company;
+
     // Generate the judgment PDF to be attached
-    const { giudizioDoc } = generatePDFs(false);
+    const doc = generateCompletePDF({
+      mode: 'judgment',
+      visit: visitForm,
+      worker: workerData!,
+      company,
+      doctor,
+      workHistory,
+      familyHistory,
+      physioHistory,
+      risks
+    });
+
     // Convert PDF to base64 for Gmail attachment
-    const pdfBase64 = giudizioDoc.output('datauristring').split(',')[1];
+    const pdfBase64 = doc.output('datauristring').split(',')[1];
 
     if (sendToWorker && emailPreview.workerEmail) {
       await sendEmailViaGmail(
@@ -601,189 +619,25 @@ const NuovaVisita = () => {
     alert("Comunicazioni inviate e visita completata!");
   };
 
-  const generatePDFs = (save: boolean = true) => {
-    if (!workerData) return { giudizioDoc: new jsPDF(), cartellaDoc: new jsPDF() };
-    const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
-    const doctorData = doctorDataResults[0] as DoctorProfile || { nome: '', specializzazione: '', n_iscrizione: '' };
-    const doc = new jsPDF();
+  const generatePDF = (mode: 'full' | 'judgment' | 'combined') => {
+    if (!workerData) return;
 
-    // Standard PDF Generation (Giudizio di Idoneità)
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text("(D.Lgs. 81/08 e s.m.i. - Art. 41)", 105, 26, { align: 'center' });
+    const doctor = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] as DoctorProfile || { nome: '', specializzazione: '', n_iscrizione: '' };
+    const company = executeQuery("SELECT * FROM companies WHERE id = ?", [workerData.company_id])[0] as Company;
 
-    doc.setFont("helvetica", "normal");
-    doc.rect(15, 35, 180, 45);
-    doc.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 45);
-    doc.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${workerData.azienda}`, 20, 57);
-    doc.text(`Mansione: ${workerData.mansione}`, 20, 63);
-    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
-    doc.text(`Tipo Visita: ${visitForm.tipo_visita?.toUpperCase()}`, 20, 75);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO:", 20, 90);
-    doc.setFontSize(14);
-    doc.text(visitForm.giudizio?.toUpperCase() || '', 45, 90);
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    if (visitForm.prescrizioni) {
-      doc.text("Prescrizioni/Limitazioni:", 20, 100);
-      doc.text(visitForm.prescrizioni, 20, 107, { maxWidth: 170 });
-    }
-
-    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 140);
-
-    const signatureY = 170;
-    doc.text(`Dott. ${doctorData.nome || '____________________'}`, 130, signatureY);
-    doc.text(`Spec. ${doctorData.specializzazione || '____________________'}`, 130, signatureY + 6);
-    doc.text(`N. Iscr. ${doctorData.n_iscrizione || '_______'}`, 130, signatureY + 12);
-    doc.line(130, signatureY + 14, 190, signatureY + 14);
-    doc.text("Firma del Medico Competente", 135, signatureY + 19);
-
-    if (save) doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
-
-    // Extended Cartella Sanitaria (Allegato 3A)
-    const cartella = new jsPDF();
-    cartella.setFontSize(14);
-    cartella.setFont("helvetica", "bold");
-    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 15, { align: 'center' });
-    cartella.setFontSize(10);
-    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 21, { align: 'center' });
-
-    let currentY = 30;
-    const checkY = (needed: number) => {
-      if (currentY + needed > 280) {
-        cartella.addPage();
-        currentY = 20;
-      }
-    };
-
-    const addSectionTitle = (title: string) => {
-      checkY(15);
-      cartella.setFont("helvetica", "bold");
-      cartella.setFillColor(240, 240, 240);
-      cartella.rect(15, currentY, 180, 7, 'F');
-      cartella.text(title, 20, currentY + 5);
-      currentY += 12;
-    };
-
-    const addKeyValue = (label: string, value: string | number | undefined, sub: boolean = false) => {
-      checkY(7);
-      cartella.setFont("helvetica", "bold");
-      cartella.text(`${label}:`, sub ? 25 : 20, currentY);
-      cartella.setFont("helvetica", "normal");
-      const text = String(value || "Non rilevato");
-      const split = cartella.splitTextToSize(text, sub ? 155 : 160);
-      cartella.text(split, sub ? 55 : 55, currentY);
-      currentY += (split.length * 5) + 2;
-    };
-
-    // 1. Dati Medico (Header)
-    cartella.setFontSize(8);
-    cartella.text(`Medico Competente: Dott. ${doctorData.nome} | Iscr. ${doctorData.n_iscrizione}`, 15, 8);
-    cartella.setFontSize(10);
-
-    // 2. Anagrafica
-    addSectionTitle("1. DATI AZIENDA E LAVORATORE");
-    addKeyValue("Azienda", workerData.azienda);
-    addKeyValue("Lavoratore", `${workerData.cognome} ${workerData.nome}`);
-    addKeyValue("Cod. Fiscale", workerData.codice_fiscale);
-    addKeyValue("Sesso", workerData.sesso);
-    addKeyValue("Data Nascita", workerData.data_nascita);
-    addKeyValue("Mansione", workerData.mansione);
-
-    // 3. Tipo Visita
-    addSectionTitle("2. DETTAGLI VISITA");
-    addKeyValue("Data Visita", visitForm.data_visita);
-    addKeyValue("Tipo Visita", visitForm.tipo_visita?.toUpperCase());
-
-    // 4. Anamnesi Lavorativa
-    addSectionTitle("3. ANAMNESI LAVORATIVA");
-    if (workHistory.esperienze.length > 0) {
-      addKeyValue("Esposizioni Cumulative", Object.entries(cumulativeExposures).map(([r, y]) => `${r}: ${y}y`).join(" | "));
-      workHistory.esperienze.forEach((exp, i) => {
-        cartella.setFont("helvetica", "italic");
-        cartella.text(`Esperienza ${i + 1}: ${exp.azienda} (${exp.dal}-${exp.al})`, 20, currentY);
-        currentY += 5;
-        addKeyValue("Mansione/Rischi", `${exp.mansione} - ${exp.esposizioni.join(", ")}`, true);
-      });
-    } else {
-      addKeyValue("Esperienze", "Nessuna esperienza pregressa registrata");
-    }
-    addKeyValue("Infortuni", workHistory.infortuni === 'Sì' ? `${workHistory.infortuni_n} (Ultimo: ${workHistory.infortuni_ultimo_anno} - ${workHistory.infortuni_tipo})` : "Nessuno");
-    addKeyValue("Malattie Prof.", workHistory.malattie_professionali === 'Sì' ? `${workHistory.malattie_professionali_quale} (${workHistory.malattie_professionali_anno})` : "No");
-
-    // 5. Anamnesi Familiare
-    addSectionTitle("4. ANAMNESI FAMILIARE");
-    Object.entries(familyHistory).forEach(([member, data]) => {
-      const label = member.replace('_', ' ').charAt(0).toUpperCase() + member.replace('_', ' ').slice(1);
-      const content = data.patologie.length > 0 || data.deceduto
-        ? `${data.deceduto ? 'Deceduto ' + (data.eta_decesso ? '(' + data.eta_decesso + 'a)' : '') : 'Vivente'}. Patologie: ${data.patologie.join(", ") || 'Nessuna'} ${data.altro_note ? '- ' + data.altro_note : ''}`
-        : "Nulla da segnalare";
-      addKeyValue(label, content);
+    generateCompletePDF({
+      mode,
+      visit: visitForm,
+      worker: workerData,
+      company,
+      doctor,
+      workHistory,
+      familyHistory,
+      physioHistory,
+      risks
     });
 
-    // 6. Anamnesi Fisiologica
-    addSectionTitle("5. ANAMNESI FISIOLOGICA");
-    addKeyValue("Gravidanza/Parto", physioHistory.sviluppo.gravidanza_parto + (physioHistory.sviluppo.gravidanza_note ? `: ${physioHistory.sviluppo.gravidanza_note}` : ""));
-    addKeyValue("Sviluppo Psicomotorio", physioHistory.sviluppo.psicomotorio + (physioHistory.sviluppo.psicomotorio_note ? `: ${physioHistory.sviluppo.psicomotorio_note}` : ""));
-    addKeyValue("Sviluppo Puberale", physioHistory.puberta.sviluppo_puberale);
-    if (workerData.sesso?.toUpperCase().startsWith('F')) {
-      addKeyValue("Menarca", `${physioHistory.puberta.menarca_eta} anni`);
-      addKeyValue("Ciclo", physioHistory.puberta.ciclo);
-      addKeyValue("Gravidanze/Parti", `${physioHistory.puberta.gravidanze_n || 0} / ${physioHistory.puberta.parti_n || 0} (Aborti: ${physioHistory.puberta.aborti_n || 0})`);
-      addKeyValue("Menopausa", physioHistory.puberta.menopausa ? `Sì (${physioHistory.puberta.menopausa_eta} anni)` : "No");
-    }
-    addKeyValue("Fumo", physioHistory.abitudini.fumo === 'Fumatore' ? `Sì (${physioHistory.abitudini.fumo_sigarette_die} sig/die x ${physioHistory.abitudini.fumo_anni}y)` : physioHistory.abitudini.fumo === 'Ex fumatore' ? `Ex (cessato ${physioHistory.abitudini.fumo_anno_cessazione})` : "No");
-    addKeyValue("Alcol", physioHistory.abitudini.alcol === 'Quotidiano' ? `Quotidiano (${physioHistory.abitudini.alcol_unita_die} unità/die)` : physioHistory.abitudini.alcol);
-    addKeyValue("Attività Fisica", physioHistory.abitudini.attivita_fisica);
-    addKeyValue("Dieta", physioHistory.abitudini.dieta === 'Altro' ? physioHistory.abitudini.dieta_altro : physioHistory.abitudini.dieta);
-    addKeyValue("Qualità Sonno", physioHistory.sonno.qualita);
-    addKeyValue("Farmaci Abituali", physioHistory.abitudini.farmaci_abituali || "Nessuno");
-    addKeyValue("Allergie", physioHistory.abitudini.nessuna_allergia ? "Nessuna allergia nota" : physioHistory.abitudini.allergie_note);
-
-    // 7. Anamnesi Patologica
-    addSectionTitle("6. ANAMNESI PATOLOGICA");
-    addKeyValue("Remota e Prossima", visitForm.anamnesi_patologica || "Negativa");
-
-    // 8. Esame Obiettivo
-    addSectionTitle("7. ESAME OBIETTIVO E PARAMETRI");
-    addKeyValue("Condizioni Gen.", visitForm.condizioni_generali);
-    addKeyValue("Antropometria", `Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | IMC: ${bmi}`);
-    addKeyValue("App. Cardiovasc.", `Toni: ${visitForm.eo_toni_puri ? 'puri' : 'impuri'}, ${visitForm.eo_toni_ritmici ? 'ritmici' : 'aritmici'}. Varici: ${visitForm.eo_varici ? 'Presenti' : 'Assenti'}. PA: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg. FC: ${visitForm.frequenza} bpm.`);
-    addKeyValue("App. Digerente", `Addome: ${visitForm.eo_addome_piano ? 'piano' : 'globoso'}, ${visitForm.eo_trattabile ? 'trattabile' : 'non trattabile'}, ${visitForm.eo_dolente ? 'dolente' : 'non dolente'}. Fegato: ${visitForm.eo_fegato_regolare ? 'regolare' : 'non regolare'}. Milza: ${visitForm.eo_milza_regolare ? 'regolare' : 'non regolare'}.`);
-    addKeyValue("App. Urogenitale", `Giordano: DX ${visitForm.eo_giordano_dx}, SX ${visitForm.eo_giordano_sx}.`);
-    addKeyValue("App. Respiratorio", `Plessoacustici: ${visitForm.eo_pless_norma ? 'nella norma' : 'alterati'}. Ispettivi: ${visitForm.eo_ispettivi_norma ? 'nella norma' : 'alterati'}.`);
-    addKeyValue("Sist. Nervoso", `Tinel: ${visitForm.eo_tinel}. Phalen: ${visitForm.eo_phalen}.`);
-    addKeyValue("App. Osteoart.", `Lasègue: DX ${visitForm.eo_lasegue_dx}, SX ${visitForm.eo_lasegue_sx}. Palpaz. paravertebrali: ${visitForm.eo_palpazione_paravertebrali}. Digitopress. apofisi: ${visitForm.eo_digitopressione_apofisi}. Mobilità rachide: Rot: ${visitForm.eo_rachide_rotazione}, Incl: ${visitForm.eo_rachide_inclinazione}, Flex: ${visitForm.eo_rachide_flessoestensione}.`);
-    addKeyValue("Visus e Udito", `Visus (OS/OD): Nat ${visitForm.eo_visus_nat_os}/${visitForm.eo_visus_nat_od}, Corr ${visitForm.eo_visus_corr_os}/${visitForm.eo_visus_corr_od}. Udito ridotto: ${visitForm.eo_udito_ridotto ? 'Sì' : 'No'}.`);
-    if (visitForm.eo_note) addKeyValue("Note EO", visitForm.eo_note);
-
-    // 9. Accertamenti
-    addSectionTitle("8. ACCERTAMENTI INTEGRATIVI");
-    addKeyValue("Effettuati", visitForm.accertamenti_effettuati || "Nessun accertamento integrativo eseguito");
-
-    // 10. Conclusioni
-    addSectionTitle("9. CONCLUSIONI E GIUDIZIO");
-    addKeyValue("Giudizio", visitForm.giudizio?.toUpperCase());
-    addKeyValue("Prescrizioni", visitForm.prescrizioni || "Nessuna prescrizione o limitazione");
-    addKeyValue("Prossima Visita", visitForm.scadenza_prossima);
-
-    // 11. Firme
-    checkY(40);
-    currentY += 10;
-    cartella.text(`Data: ${visitForm.data_visita}`, 20, currentY);
-    cartella.text("Firma del Lavoratore", 60, currentY + 20);
-    cartella.line(50, currentY + 15, 100, currentY + 15);
-    cartella.text("Firma del Medico Competente", 140, currentY + 20);
-    cartella.line(130, currentY + 15, 190, currentY + 15);
-
-    if (save) cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
-
-    return { giudizioDoc: doc, cartellaDoc: cartella };
+    setShowPrintDialog(false);
   };
 
   return (
@@ -1934,8 +1788,8 @@ const NuovaVisita = () => {
               <div className="flex items-center gap-3">
                 <button onClick={() => alert("Visita duplicata.")} className="p-4 text-primary/40 hover:text-primary transition-colors" title="Duplica Visita"><Copy size={20} /></button>
                 <button onClick={() => { setStep(1); setSelectedWorkerId(''); }} className="p-4 text-red-400 hover:text-red-500 transition-colors" title="Annulla"><X size={20} /></button>
-                <button onClick={() => generatePDFs()} className="flex items-center gap-2 px-6 py-4 border-2 border-primary/10 rounded-2xl text-primary font-black uppercase text-[10px] tracking-widest hover:bg-primary/5 transition-all">
-                  <Printer size={18} /> Stampa PDF
+                <button onClick={() => setShowPrintDialog(true)} className="flex items-center gap-2 px-6 py-4 border-2 border-primary/10 rounded-2xl text-primary font-black uppercase text-[10px] tracking-widest hover:bg-primary/5 transition-all">
+                  <Printer size={18} /> Stampa / Esporta PDF
                 </button>
                 <button onClick={handleSave} className="btn-accent px-10 py-4 flex items-center gap-3 shadow-2xl shadow-accent/20">
                   <Save size={20} strokeWidth={3} /> Salva Visita
@@ -2002,7 +1856,7 @@ const NuovaVisita = () => {
 
               <div className="mt-10 flex gap-4">
                 <button
-                  onClick={() => { setShowEmailDialog(false); generatePDFs(); setStep(1); setSelectedWorkerId(''); }}
+                  onClick={() => { setShowEmailDialog(false); generatePDF('judgment'); setStep(1); setSelectedWorkerId(''); }}
                   className="flex-1 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-primary transition-colors"
                 >
                   Solo Stampa (Salta Invio)
@@ -2014,6 +1868,65 @@ const NuovaVisita = () => {
                 >
                   {isSending ? <RefreshCw className="animate-spin" size={20} /> : <Send size={20} />}
                   {isSending ? 'Invio in corso...' : 'Invia e Finalizza'}
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Print Mode Selection Dialog */}
+      {showPrintDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-primary/20 backdrop-blur-md">
+           <div className="bg-white rounded-[40px] max-w-lg w-full p-10 shadow-2xl border-2 border-primary/5 animate-in zoom-in duration-300">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-4 bg-primary/10 rounded-2xl text-primary"><Printer size={32} /></div>
+                <div>
+                  <h2 className="text-2xl font-black text-primary uppercase tracking-tight">Opzioni di Stampa</h2>
+                  <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Scegli il formato del documento</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <button
+                  onClick={() => generatePDF('full')}
+                  className="w-full p-6 bg-warmWhite/50 hover:bg-primary/5 rounded-3xl border-2 border-gray-50 hover:border-primary/20 transition-all flex items-center justify-between group"
+                >
+                  <div className="text-left">
+                    <p className="font-black text-primary uppercase text-sm">Cartella Sanitaria Completa</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight mt-1">Inclusa Anamnesi e Esame Obiettivo (Allegato 3A)</p>
+                  </div>
+                  <FileText className="text-gray-300 group-hover:text-primary transition-colors" size={24} />
+                </button>
+
+                <button
+                  onClick={() => generatePDF('judgment')}
+                  className="w-full p-6 bg-warmWhite/50 hover:bg-tealAction/5 rounded-3xl border-2 border-gray-50 hover:border-tealAction/20 transition-all flex items-center justify-between group"
+                >
+                  <div className="text-left">
+                    <p className="font-black text-tealAction uppercase text-sm">Giudizio di Idoneità</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight mt-1">Solo esito per lavoratore e datore</p>
+                  </div>
+                  <FileCheck className="text-gray-300 group-hover:text-tealAction transition-colors" size={24} />
+                </button>
+
+                <button
+                  onClick={() => generatePDF('combined')}
+                  className="w-full p-6 bg-warmWhite/50 hover:bg-accent/5 rounded-3xl border-2 border-gray-50 hover:border-accent/20 transition-all flex items-center justify-between group"
+                >
+                  <div className="text-left">
+                    <p className="font-black text-accent uppercase text-sm">Cartella + Giudizio (Unico PDF)</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight mt-1">Documento completo per archivio digitale</p>
+                  </div>
+                  <Copy className="text-gray-300 group-hover:text-accent transition-colors" size={24} />
+                </button>
+              </div>
+
+              <div className="mt-10 flex gap-4">
+                <button
+                  onClick={() => setShowPrintDialog(false)}
+                  className="flex-1 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+                >
+                  Annulla
                 </button>
               </div>
            </div>
