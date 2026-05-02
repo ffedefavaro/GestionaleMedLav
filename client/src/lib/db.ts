@@ -204,6 +204,28 @@ const createTables = (database: Database) => {
       scadenza_sostituzione DATE,
       FOREIGN KEY (worker_id) REFERENCES workers(id)
     );
+
+    CREATE TABLE IF NOT EXISTS planned_appointments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER,
+      company_id INTEGER,
+      data_proposta DATE,
+      sede TEXT,
+      stato TEXT, -- pending, confirmed, rescheduled, cancelled
+      notes TEXT,
+      FOREIGN KEY (worker_id) REFERENCES workers(id),
+      FOREIGN KEY (company_id) REFERENCES companies(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS appointment_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      appointment_id INTEGER,
+      data_precedente DATE,
+      data_nuova DATE,
+      motivo TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (appointment_id) REFERENCES planned_appointments(id)
+    );
   `);
 
   // Initialize masters
@@ -266,7 +288,9 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;",
-    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;"
+    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;",
+    "CREATE TABLE IF NOT EXISTS planned_appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER, company_id INTEGER, data_proposta DATE, sede TEXT, stato TEXT, notes TEXT, FOREIGN KEY (worker_id) REFERENCES workers(id), FOREIGN KEY (company_id) REFERENCES companies(id));",
+    "CREATE TABLE IF NOT EXISTS appointment_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, appointment_id INTEGER, data_precedente DATE, data_nuova DATE, motivo TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (appointment_id) REFERENCES planned_appointments(id));"
   ];
 
   migrations.forEach(m => {

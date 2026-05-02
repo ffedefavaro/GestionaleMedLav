@@ -1,4 +1,4 @@
-const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
 
 export interface GmailMessage {
   id: string;
