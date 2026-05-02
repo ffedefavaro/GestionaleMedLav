@@ -9,12 +9,15 @@ import { isAfter, isBefore, addDays } from 'date-fns';
 
 const Scadenziario = () => {
   const [visite, setVisite] = useState<any[]>([]);
+  const [aziende, setAziende] = useState<any[]>([]);
   const [filter, setFilter] = useState('all'); // all, expired, upcoming
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAzienda, setSelectedAzienda] = useState('');
+  const [selectedTipo, setSelectedTipo] = useState('');
 
   useEffect(() => {
     const data = executeQuery(`
-      SELECT visits.id, visits.data_visita, visits.scadenza_prossima, visits.giudizio,
+      SELECT visits.id, visits.data_visita, visits.scadenza_prossima, visits.giudizio, visits.tipo_visita,
              workers.nome, workers.cognome, workers.codice_fiscale, companies.ragione_sociale as azienda, workers.mansione
       FROM visits
       JOIN workers ON visits.worker_id = workers.id
@@ -22,36 +25,87 @@ const Scadenziario = () => {
       ORDER BY visits.scadenza_prossima ASC
     `);
     setVisite(data);
+
+    const aziendeData = executeQuery("SELECT DISTINCT ragione_sociale FROM companies ORDER BY ragione_sociale ASC");
+    setAziende(aziendeData);
   }, []);
 
   const today = new Date();
   const next30Days = addDays(today, 30);
+  const next7Days = addDays(today, 7);
 
   const filtered = visite.filter(v => {
     const expiry = new Date(v.scadenza_prossima);
     const matchesSearch = `${v.nome} ${v.cognome} ${v.azienda}`.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesAzienda = selectedAzienda === '' || v.azienda === selectedAzienda;
+    const matchesTipo = selectedTipo === '' || v.tipo_visita === selectedTipo;
 
     let matchesFilter = true;
     if (filter === 'expired') matchesFilter = isBefore(expiry, today);
     if (filter === 'upcoming') matchesFilter = isAfter(expiry, today) && isBefore(expiry, next30Days);
 
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesFilter && matchesAzienda && matchesTipo;
   });
+
+  const exportCSV = async () => {
+    const headers = ["Lavoratore", "Mansione", "Azienda", "Ultima Visita", "Prossima Scadenza", "Tipo Visita", "Stato"];
+    const rows = filtered.map(v => {
+      const expiry = new Date(v.scadenza_prossima);
+      const isExpired = isBefore(expiry, today);
+      const isUpcoming = isAfter(expiry, today) && isBefore(expiry, next30Days);
+      const stato = isExpired ? 'Scaduta' : isUpcoming ? 'Imminente' : 'Regolare';
+
+      return [
+        `"${v.cognome} ${v.nome}"`,
+        `"${v.mansione || ''}"`,
+        `"${v.azienda}"`,
+        `"${v.data_visita}"`,
+        `"${v.scadenza_prossima}"`,
+        `"${v.tipo_visita || ''}"`,
+        `"${stato}"`
+      ];
+    });
+
+    const csvContent = "\ufeff" + [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Scadenziario_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+
+    await runCommand("INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+      ["EXPORT", "visits", 0, "Scadenziario esportato in CSV"]);
+  };
 
   const export3B = async () => {
     // Basic CSV export for Allegato 3B
     const headers = ["Azienda", "Lavoratore", "CF Lavoratore", "Data Visita", "Giudizio"];
-    const rows = filtered.map(v => [v.azienda, `${v.cognome} ${v.nome}`, v.codice_fiscale, v.data_visita, v.giudizio]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const rows = filtered.map(v => [
+      `"${v.azienda}"`,
+      `"${v.cognome} ${v.nome}"`,
+      `"${v.codice_fiscale}"`,
+      `"${v.data_visita}"`,
+      `"${v.giudizio || ''}"`
+    ]);
+    const csvContent = "\ufeff" + [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `Allegato_3B_${new Date().getFullYear()}.csv`;
     link.click();
 
-    await runCommand("INSERT INTO audit_logs (action, details) VALUES (?, ?)",
-      ["EXPORT", "Allegato 3B esportato"]);
+    await runCommand("INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+      ["EXPORT", "visits", 0, "Allegato 3B esportato"]);
   };
+
+  const tipiVisita = [
+    'Preventiva',
+    'Periodica',
+    'Su richiesta',
+    'Cambio mansione',
+    'Rientro da malattia',
+    'Fine rapporto'
+  ];
 
   return (
     <div className="p-10 max-w-7xl mx-auto">
@@ -61,6 +115,12 @@ const Scadenziario = () => {
           <p className="text-gray-500 font-medium mt-2">Pianificazione e gestione sorveglianza sanitaria</p>
         </div>
         <div className="flex gap-4">
+          <button
+            onClick={exportCSV}
+            className="btn-teal flex items-center gap-3 bg-warmWhite text-primary border border-gray-200 shadow-sm"
+          >
+            <FileSpreadsheet size={20} strokeWidth={3} /> Esporta CSV
+          </button>
           <button
             onClick={export3B}
             className="btn-teal flex items-center gap-3 bg-primary shadow-primary/20"
@@ -98,8 +158,8 @@ const Scadenziario = () => {
       </div>
 
       <div className="glass-card rounded-[40px] overflow-hidden p-2">
-        <div className="p-8 flex flex-wrap items-center justify-between gap-8 bg-warmWhite/20 border-b border-gray-100/50">
-          <div className="flex-1 flex items-center gap-4 max-w-xl">
+        <div className="p-8 flex flex-wrap items-center justify-between gap-6 bg-warmWhite/20 border-b border-gray-100/50">
+          <div className="flex-1 flex items-center gap-4 min-w-[300px]">
             <div className="bg-white p-3 rounded-2xl shadow-inner border border-gray-100 flex items-center gap-3 flex-1">
               <Search className="text-gray-300" size={24} />
               <input
@@ -110,10 +170,31 @@ const Scadenziario = () => {
               />
             </div>
           </div>
-          <div className="flex items-center gap-3">
-             <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                <Filter size={14} /> Filtro Avanzato
-             </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-100">
+               <Filter size={14} className="text-gray-400" />
+               <select
+                 className="bg-transparent text-[10px] font-black text-gray-500 uppercase tracking-widest outline-none"
+                 value={selectedAzienda}
+                 onChange={e => setSelectedAzienda(e.target.value)}
+               >
+                 <option value="">Tutte le Aziende</option>
+                 {aziende.map(a => <option key={a.ragione_sociale} value={a.ragione_sociale}>{a.ragione_sociale}</option>)}
+               </select>
+            </div>
+
+            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-100">
+               <Filter size={14} className="text-gray-400" />
+               <select
+                 className="bg-transparent text-[10px] font-black text-gray-500 uppercase tracking-widest outline-none"
+                 value={selectedTipo}
+                 onChange={e => setSelectedTipo(e.target.value)}
+               >
+                 <option value="">Tutti i Tipi Visita</option>
+                 {tipiVisita.map(t => <option key={t} value={t}>{t}</option>)}
+               </select>
+            </div>
           </div>
         </div>
 
@@ -133,10 +214,11 @@ const Scadenziario = () => {
               {filtered.map((v) => {
                 const expiry = new Date(v.scadenza_prossima);
                 const isExpired = isBefore(expiry, today);
+                const isVeryUpcoming = isAfter(expiry, today) && isBefore(expiry, next7Days);
                 const isUpcoming = isAfter(expiry, today) && isBefore(expiry, next30Days);
 
                 return (
-                  <tr key={v.id} className="group">
+                  <tr key={v.id} className={`group ${isVeryUpcoming ? 'bg-red-50/30' : ''}`}>
                     <td>
                       <div className="font-black text-primary text-base tracking-tight leading-none mb-1">{v.cognome} {v.nome}</div>
                       <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{v.mansione}</div>
@@ -148,7 +230,7 @@ const Scadenziario = () => {
                     </td>
                     <td className="text-gray-400 font-bold text-xs">{v.data_visita}</td>
                     <td>
-                       <div className={`font-black text-sm flex items-center gap-2 ${isExpired ? 'text-red-600' : isUpcoming ? 'text-accent' : 'text-primary'}`}>
+                       <div className={`font-black text-sm flex items-center gap-2 ${isExpired ? 'text-red-600' : isVeryUpcoming ? 'text-red-500 animate-pulse' : isUpcoming ? 'text-accent' : 'text-primary'}`}>
                           <CalendarIcon size={14} /> {v.scadenza_prossima}
                        </div>
                     </td>
@@ -156,6 +238,10 @@ const Scadenziario = () => {
                       {isExpired ? (
                         <div className="bg-red-50 text-red-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 w-fit border border-red-100 shadow-sm shadow-red-100/50">
                           <AlertCircle size={12} strokeWidth={3} /> Scaduta
+                        </div>
+                      ) : isVeryUpcoming ? (
+                        <div className="bg-red-600 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 w-fit border border-red-700 shadow-sm shadow-red-200">
+                          <AlertCircle size={12} strokeWidth={3} /> Critica (-7gg)
                         </div>
                       ) : isUpcoming ? (
                         <div className="bg-accent/5 text-accent px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center gap-2 w-fit border border-accent/10 shadow-sm shadow-accent/10">

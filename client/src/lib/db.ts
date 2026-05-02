@@ -306,3 +306,11 @@ export const runCommand = async (sql: string, params?: any[]) => {
   db.run(sql, params);
   await saveDB();
 };
+
+export const runCommands = async (commands: { sql: string, params?: any[] }[]) => {
+  if (!db) throw new Error("Database non inizializzato");
+  commands.forEach(cmd => {
+    db!.run(cmd.sql, cmd.params);
+  });
+  await saveDB();
+};

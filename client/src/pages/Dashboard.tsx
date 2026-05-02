@@ -1,22 +1,41 @@
 import { useState, useEffect } from 'react';
 import { executeQuery } from '../lib/db';
-import { Building2, Users, Stethoscope, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Building2, Stethoscope, AlertTriangle, CheckCircle2, ArrowRight, ShieldAlert, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
     aziende: 0,
-    scadenzeImminenti: 0, // 7 days
+    scadenze30: 0,
     visiteOggi: 0,
-    idoneitaScadenza: 0 // 30 days
+    nonIdoneita: 0
   });
 
   useEffect(() => {
-    const a = executeQuery("SELECT count(*) as count FROM companies")[0]?.count || 0;
+    // Aziende con almeno un lavoratore
+    const a = executeQuery("SELECT count(DISTINCT company_id) as count FROM workers")[0]?.count || 0;
+
+    // Visite previste oggi (consideriamo sia le visite fatte oggi che quelle con scadenza oggi se non ancora fatte? No, meglio visite fatte oggi)
     const v = executeQuery("SELECT count(*) as count FROM visits WHERE data_visita = date('now')")[0]?.count || 0;
-    const imminenti = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+7 days')")[0]?.count || 0;
-    const scadenza30 = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+30 days')")[0]?.count || 0;
-    setStats({ aziende: a, scadenzeImminenti: imminenti, visiteOggi: v, idoneitaScadenza: scadenza30 });
+
+    // Scadenze prossime 30 giorni
+    const s30 = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+30 days')")[0]?.count || 0;
+
+    // Non idoneità (ultimo giudizio per ogni lavoratore che sia 'Non Idoneo')
+    const ni = executeQuery(`
+      SELECT count(*) as count FROM (
+        SELECT v1.giudizio
+        FROM visits v1
+        JOIN (
+          SELECT worker_id, MAX(data_visita) as max_date
+          FROM visits
+          GROUP BY worker_id
+        ) v2 ON v1.worker_id = v2.worker_id AND v1.data_visita = v2.max_date
+        WHERE v1.giudizio LIKE '%Non Idoneo%'
+      )
+    `)[0]?.count || 0;
+
+    setStats({ aziende: a, scadenze30: s30, visiteOggi: v, nonIdoneita: ni });
   }, []);
 
   return (
@@ -34,9 +53,9 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
         <StatCard icon={<Stethoscope size={24} />} label="Visite Oggi" value={stats.visiteOggi} highlight />
-        <StatCard icon={<AlertTriangle size={24} />} label="Scadenze Imminenti" value={stats.scadenzeImminenti} warning />
+        <StatCard icon={<Clock size={24} />} label="Scadenze 30gg" value={stats.scadenze30} warning />
         <StatCard icon={<Building2 size={24} />} label="Aziende Attive" value={stats.aziende} />
-        <StatCard icon={<Users size={24} />} label="Idoneità in Scadenza" value={stats.idoneitaScadenza} />
+        <StatCard icon={<AlertTriangle size={24} />} label="Non Idoneità" value={stats.nonIdoneita} warning />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
