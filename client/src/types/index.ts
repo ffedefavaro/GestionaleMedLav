@@ -33,14 +33,90 @@ export interface Worker {
   company_email?: string;
 }
 
+export interface FamilyMemberHistory {
+  deceduto: boolean;
+  eta_decesso?: number;
+  causa?: string;
+  patologie: string[]; // Ipertensione, Cardiopatie, Diabete, Neoplasie, Malattie polmonari, Malattie renali, Malattie neurologiche, Malattie psichiatriche, Malattie professionali, Altro
+  altro_note?: string;
+}
+
+export interface FamilyHistory {
+  padre: FamilyMemberHistory;
+  madre: FamilyMemberHistory;
+  fratelli_sorelle: FamilyMemberHistory;
+  nonno_paterno: FamilyMemberHistory;
+  nonna_paterna: FamilyMemberHistory;
+  nonno_materno: FamilyMemberHistory;
+  nonna_materna: FamilyMemberHistory;
+}
+
+export interface PhysiologicalHistory {
+  sviluppo: {
+    gravidanza_parto: 'Regolari' | 'Complicazioni';
+    gravidanza_note?: string;
+    psicomotorio: 'Regolare' | 'Rallentato';
+    psicomotorio_note?: string;
+  };
+  puberta: {
+    sviluppo_puberale: 'Regolare' | 'Anticipato' | 'Ritardato';
+    menarca_eta?: number;
+    ciclo?: 'Regolare' | 'Irregolare' | 'Amenorrea';
+    gravidanze_n?: number;
+    parti_n?: number;
+    aborti_n?: number;
+    menopausa: boolean;
+    menopausa_eta?: number;
+  };
+  abitudini: {
+    fumo: 'Non fumatore' | 'Ex fumatore' | 'Fumatore';
+    fumo_sigarette_die?: number;
+    fumo_anni?: number;
+    fumo_anno_cessazione?: number;
+    alcol: 'No' | 'Occasionale' | 'Quotidiano';
+    alcol_unita_die?: number;
+    attivita_fisica: 'Sedentario' | 'Leggera' | 'Moderata' | 'Intensa';
+    dieta: 'Onnivora' | 'Vegetariana' | 'Vegana' | 'Altro';
+    dieta_altro?: string;
+    farmaci_abituali?: string;
+    nessuna_allergia: boolean;
+    allergie_note?: string;
+  };
+  sonno: {
+    qualita: 'Buona' | 'Disturbi occasionali' | 'Insonnia';
+  };
+}
+
+export interface WorkExperience {
+  azienda: string;
+  ateco: string;
+  mansione: string;
+  dal: string; // anno
+  al: string; // anno o "attuale"
+  esposizioni: string[]; // Rumore, Vibrazioni, VDT, Agenti chimici, Polveri, MMC, Posture incongrue, Biologico, Radiazioni, Turni/notturno, Stress, Altro
+  note?: string;
+}
+
+export interface WorkHistory {
+  esperienze: WorkExperience[];
+  infortuni: 'Nessuno' | 'Sì';
+  infortuni_n?: number;
+  infortuni_ultimo_anno?: number;
+  infortuni_tipo?: string;
+  malattie_professionali: 'No' | 'Sì';
+  malattie_professionali_quale?: string;
+  malattie_professionali_anno?: number;
+}
+
 export interface Visit {
   id: number;
   worker_id: number;
   data_visita: string;
   tipo_visita: string;
-  anamnesi_lavorativa: string;
-  anamnesi_familiare: string;
+  anamnesi_lavorativa: string; // Ora conterrà JSON di WorkHistory
+  anamnesi_familiare: string; // Ora conterrà JSON di FamilyHistory
   anamnesi_patologica: string;
+  anamnesi_fisiologica?: string; // Nuova colonna per JSON di PhysiologicalHistory
 
   // Dati Antropometrici
   condizioni_generali: 'Buone' | 'Discrete' | 'Scadenti';

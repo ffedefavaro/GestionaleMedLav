@@ -352,6 +352,7 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN trasmissione_datore_data DATE;",
     "ALTER TABLE visits ADD COLUMN trasmissione_datore_metodo TEXT;",
     "ALTER TABLE companies ADD COLUMN email TEXT;",
+    "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;",
 
     "CREATE TABLE IF NOT EXISTS email_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, destinatario TEXT, oggetto TEXT, data_ora DATETIME DEFAULT CURRENT_TIMESTAMP, visit_id INTEGER, esito TEXT, errore_dettaglio TEXT);",
     "CREATE TABLE IF NOT EXISTS email_templates (tipo TEXT UNIQUE, soggetto TEXT, corpo TEXT);",

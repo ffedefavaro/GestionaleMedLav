@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import {
-  User, Clipboard, Activity, CheckCircle, Mail, RefreshCw,
+  User, Users, Clipboard, Activity, CheckCircle, Mail, RefreshCw,
   Heart, Wind, Stethoscope, Eye, Ear, Brain,
   ChevronDown, ChevronUp, Check, AlertTriangle, FileText, Send, Save, Printer, Copy, X,
-  ExternalLink, FileCheck
+  ExternalLink, FileCheck, Baby, Cigarette, Beer, Dumbbell, Utensils, Moon,
+  Plus, Trash2, Factory, AlertCircle, ChevronRight
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
@@ -13,8 +14,110 @@ import { get, set } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
 import { useAppStore } from '../store/useAppStore';
 import { sendEmailViaGmail } from '../lib/emailService';
-import type { Visit, Worker, EmailTemplate, DoctorProfile } from '../types';
+import type {
+  Visit, Worker, EmailTemplate, DoctorProfile,
+  FamilyMemberHistory, FamilyHistory, PhysiologicalHistory,
+  WorkHistory
+} from '../types';
 import { Link } from 'react-router-dom';
+
+const emptyFamilyMember: FamilyMemberHistory = {
+  deceduto: false,
+  patologie: []
+};
+
+const defaultFamilyHistory: FamilyHistory = {
+  padre: { ...emptyFamilyMember },
+  madre: { ...emptyFamilyMember },
+  fratelli_sorelle: { ...emptyFamilyMember },
+  nonno_paterno: { ...emptyFamilyMember },
+  nonna_paterna: { ...emptyFamilyMember },
+  nonno_materno: { ...emptyFamilyMember },
+  nonna_materna: { ...emptyFamilyMember }
+};
+
+const defaultPhysiologicalHistory: PhysiologicalHistory = {
+  sviluppo: {
+    gravidanza_parto: 'Regolari',
+    psicomotorio: 'Regolare'
+  },
+  puberta: {
+    sviluppo_puberale: 'Regolare',
+    menopausa: false
+  },
+  abitudini: {
+    fumo: 'Non fumatore',
+    alcol: 'No',
+    attivita_fisica: 'Sedentario',
+    dieta: 'Onnivora',
+    nessuna_allergia: true
+  },
+  sonno: {
+    qualita: 'Buona'
+  }
+};
+
+const defaultWorkHistory: WorkHistory = {
+  esperienze: [],
+  infortuni: 'Nessuno',
+  malattie_professionali: 'No'
+};
+
+const ATECO_CATEGORIES = [
+  'Agricoltura, Silvicoltura e Pesca',
+  'Estrazione di Minerali',
+  'Attività Manifatturiere',
+  'Fornitura di Energia/Acqua/Rifiuti',
+  'Costruzioni',
+  'Commercio',
+  'Trasporto e Magazzinaggio',
+  'Servizi di Alloggio e Ristorazione',
+  'Informazione e Comunicazione',
+  'Attività Finanziarie e Assicurative',
+  'Attività Professionali, Scientifiche e Tecniche',
+  'Istruzione',
+  'Sanità e Assistenza Sociale',
+  'Altro'
+];
+
+const WORK_RISKS = [
+  'Rumore', 'Vibrazioni', 'VDT', 'Agenti chimici', 'Polveri',
+  'MMC', 'Posture incongrue', 'Biologico', 'Radiazioni',
+  'Turni/notturno', 'Stress', 'Altro'
+];
+
+const FAMILY_PATHOLOGIES = [
+  'Ipertensione', 'Cardiopatie', 'Diabete', 'Neoplasie',
+  'Malattie polmonari', 'Malattie renali', 'Malattie neurologiche',
+  'Malattie psichiatriche', 'Malattie professionali'
+];
+
+interface PillSelectorProps<T extends string> {
+  options: T[];
+  value: T;
+  onChange: (val: T) => void;
+  label?: string;
+}
+
+const PillSelector = <T extends string>({ options, value, onChange, label }: PillSelectorProps<T>) => (
+  <div className="space-y-2">
+    {label && <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{label}</label>}
+    <div className="flex flex-wrap gap-1 p-1 bg-warmWhite/50 rounded-2xl border border-gray-100 w-fit">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={`px-4 py-2 text-[10px] font-black uppercase tracking-tight rounded-xl transition-all ${
+            value === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-primary/40 hover:bg-white'
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  </div>
+);
 
 interface CollapsibleCardProps {
   title: string;
@@ -101,6 +204,12 @@ const NuovaVisita = () => {
   const [workerData, setWorkerData] = useState<Worker | null>(null);
   const [step, setStep] = useState(1);
   const [openSection, setOpenSection] = useState<string | null>(null);
+  const [openFamilyMember, setOpenFamilyMember] = useState<string | null>(null);
+
+  // Structured Anamnesi State
+  const [familyHistory, setFamilyHistory] = useState<FamilyHistory>(defaultFamilyHistory);
+  const [physioHistory, setPhysioHistory] = useState<PhysiologicalHistory>(defaultPhysiologicalHistory);
+  const [workHistory, setWorkHistory] = useState<WorkHistory>(defaultWorkHistory);
 
   // Gmail State
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
@@ -292,6 +401,21 @@ const NuovaVisita = () => {
   const isOsteoarticolareNormal = visitForm.eo_lasegue_dx === 'Negativa' && visitForm.eo_lasegue_sx === 'Negativa' && visitForm.eo_palpazione_paravertebrali === 'Nessun dolore' && visitForm.eo_digitopressione_apofisi === 'Nessun dolore' && visitForm.eo_rachide_rotazione === 'Nella norma' && visitForm.eo_rachide_inclinazione === 'Nella norma' && visitForm.eo_rachide_flessoestensione === 'Nella norma';
   const isVisusHearingNormal = visitForm.eo_visus_nat_os === 10 && visitForm.eo_visus_nat_od === 10 && visitForm.eo_visus_corr_os === 10 && visitForm.eo_visus_corr_od === 10 && !visitForm.eo_udito_ridotto;
 
+  const cumulativeExposures = useMemo(() => {
+    const counts: Record<string, number> = {};
+    workHistory.esperienze.forEach(exp => {
+      const start = parseInt(exp.dal);
+      const end = exp.al === 'attuale' ? new Date().getFullYear() : parseInt(exp.al);
+      if (isNaN(start) || isNaN(end)) return;
+      const years = Math.max(1, end - start);
+
+      exp.esposizioni.forEach(risk => {
+        counts[risk] = (counts[risk] || 0) + years;
+      });
+    });
+    return counts;
+  }, [workHistory.esperienze]);
+
   const handleAuthAndFetch = async () => {
     const clientId = await get('google_client_id') as string;
     if (!clientId) {
@@ -346,7 +470,7 @@ const NuovaVisita = () => {
     const query = `
       INSERT INTO visits (
         worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica,
-        accertamenti_effettuati, eo_note, giudizio, prescrizioni, scadenza_prossima,
+        anamnesi_fisiologica, accertamenti_effettuati, eo_note, giudizio, prescrizioni, scadenza_prossima,
         condizioni_generali, altezza, peso, bmi, p_sistolica, p_diastolica, frequenza,
         eo_toni_puri, eo_toni_ritmici, eo_varici, eo_addome_piano, eo_trattabile, eo_dolente,
         eo_fegato_regolare, eo_milza_regolare, eo_giordano_dx, eo_giordano_sx,
@@ -357,13 +481,13 @@ const NuovaVisita = () => {
         visita_completata, allegati_count, trasmissione_lavoratore_data, trasmissione_lavoratore_metodo,
         trasmissione_datore_data, trasmissione_datore_metodo, finalized
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `;
 
     const params = [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
-      visitForm.anamnesi_lavorativa, visitForm.anamnesi_familiare, visitForm.anamnesi_patologica,
-      visitForm.accertamenti_effettuati, visitForm.eo_note, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima,
+      JSON.stringify(workHistory), JSON.stringify(familyHistory), visitForm.anamnesi_patologica,
+      JSON.stringify(physioHistory), visitForm.accertamenti_effettuati, visitForm.eo_note, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima,
       visitForm.condizioni_generali, visitForm.altezza, visitForm.peso, visitForm.bmi,
       visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza,
       visitForm.eo_toni_puri ? 1 : 0, visitForm.eo_toni_ritmici ? 1 : 0, visitForm.eo_varici ? 1 : 0,
@@ -525,58 +649,137 @@ const NuovaVisita = () => {
     const cartella = new jsPDF();
     cartella.setFontSize(14);
     cartella.setFont("helvetica", "bold");
-    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 20, { align: 'center' });
+    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 15, { align: 'center' });
     cartella.setFontSize(10);
-    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 26, { align: 'center' });
+    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 21, { align: 'center' });
 
-    cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 47);
-    cartella.text(`Azienda: ${workerData.azienda} | Mansione: ${workerData.mansione}`, 20, 53);
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
-    cartella.setFont("helvetica", "normal");
-    cartella.text("Lavorativa:", 20, 72);
-    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 78, { maxWidth: 165 });
-    cartella.text("Patologica/Familiare:", 20, 95);
-    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 101, { maxWidth: 165 });
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 3: ESAME OBIETTIVO E PARAMETRI", 15, 130);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Condizioni Generali: ${visitForm.condizioni_generali}`, 20, 137);
-    cartella.text(`Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | BMI: ${bmi}`, 20, 143);
-
-    let currentY = 153;
-    const addEOSection = (title: string, content: string) => {
-      if (currentY > 260) {
+    let currentY = 30;
+    const checkY = (needed: number) => {
+      if (currentY + needed > 280) {
         cartella.addPage();
         currentY = 20;
       }
-      cartella.setFont("helvetica", "bold");
-      cartella.text(title.toUpperCase(), 20, currentY);
-      cartella.setFont("helvetica", "normal");
-      const splitContent = cartella.splitTextToSize(content, 165);
-      cartella.text(splitContent, 25, currentY + 6);
-      currentY += (splitContent.length * 5) + 10;
     };
 
-    addEOSection("Apparato Cardiovascolare", `Toni: ${visitForm.eo_toni_puri ? 'puri' : 'impuri'}, ${visitForm.eo_toni_ritmici ? 'ritmici' : 'aritmici'}. Varici: ${visitForm.eo_varici ? 'Presenti' : 'Assenti'}. Pressione Arteriosa: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg. Frequenza Cardiaca: ${visitForm.frequenza} bpm.`);
-    addEOSection("Apparato Digerente", `Addome: ${visitForm.eo_addome_piano ? 'piano' : 'globoso'}, ${visitForm.eo_trattabile ? 'trattabile' : 'non trattabile'}, ${visitForm.eo_dolente ? 'dolente' : 'non dolente'}. Fegato: ${visitForm.eo_fegato_regolare ? 'regolare' : 'non regolare'}. Milza: ${visitForm.eo_milza_regolare ? 'regolare' : 'non regolare'}.`);
-    addEOSection("Apparato Urogenitale", `Giordano: Destro ${visitForm.eo_giordano_dx}, Sinistro ${visitForm.eo_giordano_sx}.`);
-    addEOSection("Apparato Respiratorio", `Plessoacustici: ${visitForm.eo_pless_norma ? 'nella norma' : 'alterati'}. Ispettivi: ${visitForm.eo_ispettivi_norma ? 'nella norma' : 'alterati'}.`);
-    addEOSection("Sistema Nervoso", `Test di Tinel: ${visitForm.eo_tinel}. Test di Phalen: ${visitForm.eo_phalen}.`);
-    addEOSection("Apparato Osteoarticolare", `Lasègue: Destro ${visitForm.eo_lasegue_dx}, Sinistro ${visitForm.eo_lasegue_sx}. Palpazione paravertebrali: ${visitForm.eo_palpazione_paravertebrali}. Digitopressione apofisi: ${visitForm.eo_digitopressione_apofisi}. Mobilità rachide: Rotazione ${visitForm.eo_rachide_rotazione}, Inclinazione ${visitForm.eo_rachide_inclinazione}, Flessoestensione ${visitForm.eo_rachide_flessoestensione}.`);
-    addEOSection("Visus e Udito", `Visus OS: Naturale ${visitForm.eo_visus_nat_os}/10, Corretto ${visitForm.eo_visus_corr_os}/10. Visus OD: Naturale ${visitForm.eo_visus_nat_od}/10, Corretto ${visitForm.eo_visus_corr_od}/10. Udito ridotto: ${visitForm.eo_udito_ridotto ? 'Sì' : 'No'}.`);
+    const addSectionTitle = (title: string) => {
+      checkY(15);
+      cartella.setFont("helvetica", "bold");
+      cartella.setFillColor(240, 240, 240);
+      cartella.rect(15, currentY, 180, 7, 'F');
+      cartella.text(title, 20, currentY + 5);
+      currentY += 12;
+    };
 
-    if (visitForm.eo_note) {
-      addEOSection("Note Esame Obiettivo", visitForm.eo_note);
-    }
+    const addKeyValue = (label: string, value: string | number | undefined, sub: boolean = false) => {
+      checkY(7);
+      cartella.setFont("helvetica", "bold");
+      cartella.text(`${label}:`, sub ? 25 : 20, currentY);
+      cartella.setFont("helvetica", "normal");
+      const text = String(value || "Non rilevato");
+      const split = cartella.splitTextToSize(text, sub ? 155 : 160);
+      cartella.text(split, sub ? 55 : 55, currentY);
+      currentY += (split.length * 5) + 2;
+    };
 
-    if (visitForm.accertamenti_effettuati) {
-       addEOSection("Accertamenti Strumentali", visitForm.accertamenti_effettuati);
+    // 1. Dati Medico (Header)
+    cartella.setFontSize(8);
+    cartella.text(`Medico Competente: Dott. ${doctorData.nome} | Iscr. ${doctorData.n_iscrizione}`, 15, 8);
+    cartella.setFontSize(10);
+
+    // 2. Anagrafica
+    addSectionTitle("1. DATI AZIENDA E LAVORATORE");
+    addKeyValue("Azienda", workerData.azienda);
+    addKeyValue("Lavoratore", `${workerData.cognome} ${workerData.nome}`);
+    addKeyValue("Cod. Fiscale", workerData.codice_fiscale);
+    addKeyValue("Sesso", workerData.sesso);
+    addKeyValue("Data Nascita", workerData.data_nascita);
+    addKeyValue("Mansione", workerData.mansione);
+
+    // 3. Tipo Visita
+    addSectionTitle("2. DETTAGLI VISITA");
+    addKeyValue("Data Visita", visitForm.data_visita);
+    addKeyValue("Tipo Visita", visitForm.tipo_visita?.toUpperCase());
+
+    // 4. Anamnesi Lavorativa
+    addSectionTitle("3. ANAMNESI LAVORATIVA");
+    if (workHistory.esperienze.length > 0) {
+      addKeyValue("Esposizioni Cumulative", Object.entries(cumulativeExposures).map(([r, y]) => `${r}: ${y}y`).join(" | "));
+      workHistory.esperienze.forEach((exp, i) => {
+        cartella.setFont("helvetica", "italic");
+        cartella.text(`Esperienza ${i + 1}: ${exp.azienda} (${exp.dal}-${exp.al})`, 20, currentY);
+        currentY += 5;
+        addKeyValue("Mansione/Rischi", `${exp.mansione} - ${exp.esposizioni.join(", ")}`, true);
+      });
+    } else {
+      addKeyValue("Esperienze", "Nessuna esperienza pregressa registrata");
     }
+    addKeyValue("Infortuni", workHistory.infortuni === 'Sì' ? `${workHistory.infortuni_n} (Ultimo: ${workHistory.infortuni_ultimo_anno} - ${workHistory.infortuni_tipo})` : "Nessuno");
+    addKeyValue("Malattie Prof.", workHistory.malattie_professionali === 'Sì' ? `${workHistory.malattie_professionali_quale} (${workHistory.malattie_professionali_anno})` : "No");
+
+    // 5. Anamnesi Familiare
+    addSectionTitle("4. ANAMNESI FAMILIARE");
+    Object.entries(familyHistory).forEach(([member, data]) => {
+      const label = member.replace('_', ' ').charAt(0).toUpperCase() + member.replace('_', ' ').slice(1);
+      const content = data.patologie.length > 0 || data.deceduto
+        ? `${data.deceduto ? 'Deceduto ' + (data.eta_decesso ? '(' + data.eta_decesso + 'a)' : '') : 'Vivente'}. Patologie: ${data.patologie.join(", ") || 'Nessuna'} ${data.altro_note ? '- ' + data.altro_note : ''}`
+        : "Nulla da segnalare";
+      addKeyValue(label, content);
+    });
+
+    // 6. Anamnesi Fisiologica
+    addSectionTitle("5. ANAMNESI FISIOLOGICA");
+    addKeyValue("Gravidanza/Parto", physioHistory.sviluppo.gravidanza_parto + (physioHistory.sviluppo.gravidanza_note ? `: ${physioHistory.sviluppo.gravidanza_note}` : ""));
+    addKeyValue("Sviluppo Psicomotorio", physioHistory.sviluppo.psicomotorio + (physioHistory.sviluppo.psicomotorio_note ? `: ${physioHistory.sviluppo.psicomotorio_note}` : ""));
+    addKeyValue("Sviluppo Puberale", physioHistory.puberta.sviluppo_puberale);
+    if (workerData.sesso?.toUpperCase().startsWith('F')) {
+      addKeyValue("Menarca", `${physioHistory.puberta.menarca_eta} anni`);
+      addKeyValue("Ciclo", physioHistory.puberta.ciclo);
+      addKeyValue("Gravidanze/Parti", `${physioHistory.puberta.gravidanze_n || 0} / ${physioHistory.puberta.parti_n || 0} (Aborti: ${physioHistory.puberta.aborti_n || 0})`);
+      addKeyValue("Menopausa", physioHistory.puberta.menopausa ? `Sì (${physioHistory.puberta.menopausa_eta} anni)` : "No");
+    }
+    addKeyValue("Fumo", physioHistory.abitudini.fumo === 'Fumatore' ? `Sì (${physioHistory.abitudini.fumo_sigarette_die} sig/die x ${physioHistory.abitudini.fumo_anni}y)` : physioHistory.abitudini.fumo === 'Ex fumatore' ? `Ex (cessato ${physioHistory.abitudini.fumo_anno_cessazione})` : "No");
+    addKeyValue("Alcol", physioHistory.abitudini.alcol === 'Quotidiano' ? `Quotidiano (${physioHistory.abitudini.alcol_unita_die} unità/die)` : physioHistory.abitudini.alcol);
+    addKeyValue("Attività Fisica", physioHistory.abitudini.attivita_fisica);
+    addKeyValue("Dieta", physioHistory.abitudini.dieta === 'Altro' ? physioHistory.abitudini.dieta_altro : physioHistory.abitudini.dieta);
+    addKeyValue("Qualità Sonno", physioHistory.sonno.qualita);
+    addKeyValue("Farmaci Abituali", physioHistory.abitudini.farmaci_abituali || "Nessuno");
+    addKeyValue("Allergie", physioHistory.abitudini.nessuna_allergia ? "Nessuna allergia nota" : physioHistory.abitudini.allergie_note);
+
+    // 7. Anamnesi Patologica
+    addSectionTitle("6. ANAMNESI PATOLOGICA");
+    addKeyValue("Remota e Prossima", visitForm.anamnesi_patologica || "Negativa");
+
+    // 8. Esame Obiettivo
+    addSectionTitle("7. ESAME OBIETTIVO E PARAMETRI");
+    addKeyValue("Condizioni Gen.", visitForm.condizioni_generali);
+    addKeyValue("Antropometria", `Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | IMC: ${bmi}`);
+    addKeyValue("App. Cardiovasc.", `Toni: ${visitForm.eo_toni_puri ? 'puri' : 'impuri'}, ${visitForm.eo_toni_ritmici ? 'ritmici' : 'aritmici'}. Varici: ${visitForm.eo_varici ? 'Presenti' : 'Assenti'}. PA: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg. FC: ${visitForm.frequenza} bpm.`);
+    addKeyValue("App. Digerente", `Addome: ${visitForm.eo_addome_piano ? 'piano' : 'globoso'}, ${visitForm.eo_trattabile ? 'trattabile' : 'non trattabile'}, ${visitForm.eo_dolente ? 'dolente' : 'non dolente'}. Fegato: ${visitForm.eo_fegato_regolare ? 'regolare' : 'non regolare'}. Milza: ${visitForm.eo_milza_regolare ? 'regolare' : 'non regolare'}.`);
+    addKeyValue("App. Urogenitale", `Giordano: DX ${visitForm.eo_giordano_dx}, SX ${visitForm.eo_giordano_sx}.`);
+    addKeyValue("App. Respiratorio", `Plessoacustici: ${visitForm.eo_pless_norma ? 'nella norma' : 'alterati'}. Ispettivi: ${visitForm.eo_ispettivi_norma ? 'nella norma' : 'alterati'}.`);
+    addKeyValue("Sist. Nervoso", `Tinel: ${visitForm.eo_tinel}. Phalen: ${visitForm.eo_phalen}.`);
+    addKeyValue("App. Osteoart.", `Lasègue: DX ${visitForm.eo_lasegue_dx}, SX ${visitForm.eo_lasegue_sx}. Palpaz. paravertebrali: ${visitForm.eo_palpazione_paravertebrali}. Digitopress. apofisi: ${visitForm.eo_digitopressione_apofisi}. Mobilità rachide: Rot: ${visitForm.eo_rachide_rotazione}, Incl: ${visitForm.eo_rachide_inclinazione}, Flex: ${visitForm.eo_rachide_flessoestensione}.`);
+    addKeyValue("Visus e Udito", `Visus (OS/OD): Nat ${visitForm.eo_visus_nat_os}/${visitForm.eo_visus_nat_od}, Corr ${visitForm.eo_visus_corr_os}/${visitForm.eo_visus_corr_od}. Udito ridotto: ${visitForm.eo_udito_ridotto ? 'Sì' : 'No'}.`);
+    if (visitForm.eo_note) addKeyValue("Note EO", visitForm.eo_note);
+
+    // 9. Accertamenti
+    addSectionTitle("8. ACCERTAMENTI INTEGRATIVI");
+    addKeyValue("Effettuati", visitForm.accertamenti_effettuati || "Nessun accertamento integrativo eseguito");
+
+    // 10. Conclusioni
+    addSectionTitle("9. CONCLUSIONI E GIUDIZIO");
+    addKeyValue("Giudizio", visitForm.giudizio?.toUpperCase());
+    addKeyValue("Prescrizioni", visitForm.prescrizioni || "Nessuna prescrizione o limitazione");
+    addKeyValue("Prossima Visita", visitForm.scadenza_prossima);
+
+    // 11. Firme
+    checkY(40);
+    currentY += 10;
+    cartella.text(`Data: ${visitForm.data_visita}`, 20, currentY);
+    cartella.text("Firma del Lavoratore", 60, currentY + 20);
+    cartella.line(50, currentY + 15, 100, currentY + 15);
+    cartella.text("Firma del Medico Competente", 140, currentY + 20);
+    cartella.line(130, currentY + 15, 190, currentY + 15);
 
     if (save) cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
 
@@ -654,51 +857,543 @@ const NuovaVisita = () => {
         )}
 
         {step === 2 && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="space-y-12 animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 text-primary">
                 <div className="p-3 bg-primary/5 rounded-2xl"><Clipboard size={24} strokeWidth={2.5} /></div>
-                <h2 className="text-2xl font-black tracking-tight">Anamnesi</h2>
+                <h2 className="text-2xl font-black tracking-tight">Anamnesi Completa</h2>
               </div>
               <div className="bg-warmWhite/50 p-2 px-4 rounded-2xl border border-gray-100 font-black text-primary uppercase text-xs">
                 {workerData?.cognome} {workerData?.nome}
               </div>
             </div>
 
-            <div className="bg-amber-500/5 border border-amber-500/10 rounded-3xl p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-amber-600 font-black flex items-center gap-2 text-sm uppercase tracking-tight">
-                  <Mail size={18} /> Acquisizione Gmail
-                </h3>
-                <button onClick={handleAuthAndFetch} disabled={loadingGmail} className="btn-accent flex items-center gap-2 text-xs py-2 px-4">
-                  {loadingGmail ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />} Sincronizza
-                </button>
-              </div>
-              {gmailMessages.length > 0 && (
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                  {gmailMessages.map(msg => (
-                    <div key={msg.id} className="bg-white/80 p-3 rounded-xl border border-amber-500/10 text-[10px] flex justify-between items-center gap-4">
-                      <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
-                      <button onClick={() => importEmailText(msg)} className="text-amber-600 hover:underline font-black uppercase tracking-tighter shrink-0">Importa</button>
+            {/* 1. Anamnesi Lavorativa Strutturata */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-black text-primary uppercase tracking-tight flex items-center gap-3">
+                <Factory className="text-primary/40" /> 1. Storia Lavorativa
+              </h3>
+
+              <div className="bg-primary/5 p-6 rounded-[32px] border border-primary/10">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-widest">Esposizioni Cumulative:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(cumulativeExposures).length > 0 ? Object.entries(cumulativeExposures).map(([risk, years]) => (
+                        <span key={risk} className="bg-white px-3 py-1 rounded-full text-[9px] font-black text-primary border border-primary/10">
+                          {risk}: {years} {years === 1 ? 'anno' : 'anni'}
+                        </span>
+                      )) : <span className="text-[10px] text-gray-400 font-bold italic">Nessuna esposizione registrata</span>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setWorkHistory({
+                      ...workHistory,
+                      esperienze: [{ azienda: '', ateco: ATECO_CATEGORIES[0], mansione: '', dal: new Date().getFullYear().toString(), al: 'attuale', esposizioni: [] }, ...workHistory.esperienze]
+                    })}
+                    className="btn-teal !py-2 !px-4 text-[10px]"
+                  >
+                    <Plus size={14} /> Aggiungi Esperienza
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {workHistory.esperienze.map((exp, idx) => (
+                    <div key={idx} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm relative group">
+                      <button
+                        onClick={() => {
+                          const newExps = [...workHistory.esperienze];
+                          newExps.splice(idx, 1);
+                          setWorkHistory({ ...workHistory, esperienze: newExps });
+                        }}
+                        className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Azienda</label>
+                            <input className="input-standard !py-2" value={exp.azienda} onChange={e => {
+                              const next = [...workHistory.esperienze];
+                              next[idx].azienda = e.target.value;
+                              setWorkHistory({...workHistory, esperienze: next});
+                            }} />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Settore ATECO</label>
+                            <select className="input-standard !py-2" value={exp.ateco} onChange={e => {
+                              const next = [...workHistory.esperienze];
+                              next[idx].ateco = e.target.value;
+                              setWorkHistory({...workHistory, esperienze: next});
+                            }}>
+                              {ATECO_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Mansione</label>
+                            <input className="input-standard !py-2" value={exp.mansione} onChange={e => {
+                              const next = [...workHistory.esperienze];
+                              next[idx].mansione = e.target.value;
+                              setWorkHistory({...workHistory, esperienze: next});
+                            }} />
+                          </div>
+                          <div className="flex gap-4">
+                            <div className="flex-1 space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Dal (Anno)</label>
+                              <input type="number" className="input-standard !py-2" value={exp.dal} onChange={e => {
+                                const next = [...workHistory.esperienze];
+                                next[idx].dal = e.target.value;
+                                setWorkHistory({...workHistory, esperienze: next});
+                              }} />
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Al (Anno)</label>
+                              <input className="input-standard !py-2" value={exp.al} onChange={e => {
+                                const next = [...workHistory.esperienze];
+                                next[idx].al = e.target.value;
+                                setWorkHistory({...workHistory, esperienze: next});
+                              }} />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Rischi Esposizione</label>
+                          <div className="flex flex-wrap gap-1">
+                            {WORK_RISKS.map(risk => (
+                              <button
+                                key={risk}
+                                onClick={() => {
+                                  const next = [...workHistory.esperienze];
+                                  const current = next[idx].esposizioni;
+                                  next[idx].esposizioni = current.includes(risk) ? current.filter(r => r !== risk) : [...current, risk];
+                                  setWorkHistory({...workHistory, esperienze: next});
+                                }}
+                                className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all border ${
+                                  exp.esposizioni.includes(risk) ? 'bg-primary border-primary text-white' : 'bg-white border-gray-100 text-gray-400'
+                                }`}
+                              >
+                                {risk}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
-              )}
+
+                <div className="mt-8 pt-8 border-t border-primary/10 grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <PillSelector
+                      label="Infortuni sul lavoro"
+                      options={['Nessuno', 'Sì']}
+                      value={workHistory.infortuni}
+                      onChange={v => setWorkHistory({...workHistory, infortuni: v})}
+                    />
+                    {workHistory.infortuni === 'Sì' && (
+                      <div className="flex gap-4 animate-in slide-in-from-left-2">
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">N°</label>
+                          <input type="number" className="input-standard !py-2" value={workHistory.infortuni_n} onChange={e => setWorkHistory({...workHistory, infortuni_n: parseInt(e.target.value)})} />
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Ultimo Anno</label>
+                          <input type="number" className="input-standard !py-2" value={workHistory.infortuni_ultimo_anno} onChange={e => setWorkHistory({...workHistory, infortuni_ultimo_anno: parseInt(e.target.value)})} />
+                        </div>
+                        <div className="flex-[2] space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Tipo/Dinamica</label>
+                          <input className="input-standard !py-2" value={workHistory.infortuni_tipo} onChange={e => setWorkHistory({...workHistory, infortuni_tipo: e.target.value})} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-4">
+                    <PillSelector
+                      label="Malattie professionali riconosciute"
+                      options={['No', 'Sì']}
+                      value={workHistory.malattie_professionali}
+                      onChange={v => setWorkHistory({...workHistory, malattie_professionali: v})}
+                    />
+                    {workHistory.malattie_professionali === 'Sì' && (
+                      <div className="flex gap-4 animate-in slide-in-from-right-2">
+                        <div className="flex-[2] space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Quale malattia</label>
+                          <input className="input-standard !py-2" value={workHistory.malattie_professionali_quale} onChange={e => setWorkHistory({...workHistory, malattie_professionali_quale: e.target.value})} />
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Anno</label>
+                          <input type="number" className="input-standard !py-2" value={workHistory.malattie_professionali_anno} onChange={e => setWorkHistory({...workHistory, malattie_professionali_anno: parseInt(e.target.value)})} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
-                <textarea className="input-standard h-40" value={visitForm.anamnesi_lavorativa} onChange={e => setVisitForm({...visitForm, anamnesi_lavorativa: e.target.value})} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Patologica / Familiare</label>
-                <textarea className="input-standard h-40" value={visitForm.anamnesi_patologica} onChange={e => setVisitForm({...visitForm, anamnesi_patologica: e.target.value})} />
+            {/* 2. Anamnesi Familiare Strutturata */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-black text-primary uppercase tracking-tight flex items-center gap-3">
+                <Users className="text-primary/40" /> 2. Anamnesi Familiare
+              </h3>
+
+              <div className="grid grid-cols-1 gap-4">
+                {Object.entries(familyHistory).map(([member, data]) => {
+                  const label = member.replace('_', ' ').charAt(0).toUpperCase() + member.replace('_', ' ').slice(1);
+                  const isModified = data.deceduto || data.patologie.length > 0;
+                  const isOpen = openFamilyMember === member;
+
+                  const showExpanded = isOpen || isModified;
+                  return (
+                    <div key={member} className={`transition-all duration-300 rounded-3xl border-2 ${
+                      showExpanded ? 'border-amber-400 bg-white shadow-xl' : 'border-gray-50 bg-warmWhite/20'
+                    }`}>
+                      <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setOpenFamilyMember(showExpanded && !isOpen ? member : (isOpen ? null : member))}>
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 rounded-xl ${isOpen ? 'bg-amber-100 text-amber-600' : 'bg-primary/5 text-primary'}`}>
+                            <User size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-primary/80">{label}</h4>
+                            {!isOpen && (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {!isModified ? (
+                                  <>
+                                    <CheckCircle size={10} className="text-tealAction" />
+                                    <span className="text-[10px] text-gray-400 font-bold">Nulla da segnalare</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertCircle size={10} className="text-amber-500" />
+                                    <span className="text-[10px] text-amber-600 font-black uppercase">Dati registrati</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <button className="text-[9px] font-black text-primary uppercase tracking-widest hover:underline">
+                          {isOpen ? 'Chiudi' : 'Modifica'}
+                        </button>
+                      </div>
+
+                      {showExpanded && (
+                        <div className="p-6 pt-0 border-t border-gray-50 animate-in fade-in slide-in-from-top-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                            <div className="space-y-4">
+                              <label className="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" className="hidden" checked={data.deceduto} onChange={e => {
+                                  const next = {...familyHistory};
+                                  next[member as keyof FamilyHistory].deceduto = e.target.checked;
+                                  setFamilyHistory(next);
+                                }} />
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${data.deceduto ? 'bg-primary border-primary' : 'border-gray-200'}`}>
+                                  {data.deceduto && <Check size={14} className="text-white" strokeWidth={4} />}
+                                </div>
+                                <span className="text-xs font-black text-primary/70 uppercase">Deceduto</span>
+                              </label>
+
+                              {data.deceduto && (
+                                <div className="flex gap-4 animate-in slide-in-from-left-2">
+                                  <div className="flex-1 space-y-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase">Età decesso</label>
+                                    <input type="number" className="input-standard !py-2" value={data.eta_decesso} onChange={e => {
+                                      const next = {...familyHistory};
+                                      next[member as keyof FamilyHistory].eta_decesso = parseInt(e.target.value);
+                                      setFamilyHistory(next);
+                                    }} />
+                                  </div>
+                                  <div className="flex-[2] space-y-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase">Causa</label>
+                                    <input className="input-standard !py-2" value={data.causa} onChange={e => {
+                                      const next = {...familyHistory};
+                                      next[member as keyof FamilyHistory].causa = e.target.value;
+                                      setFamilyHistory(next);
+                                    }} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Patologie principali</label>
+                              <div className="flex flex-wrap gap-1">
+                                {FAMILY_PATHOLOGIES.map(p => (
+                                  <button
+                                    key={p}
+                                    onClick={() => {
+                                      const next = {...familyHistory};
+                                      const current = next[member as keyof FamilyHistory].patologie;
+                                      next[member as keyof FamilyHistory].patologie = current.includes(p) ? current.filter(x => x !== p) : [...current, p];
+                                      setFamilyHistory(next);
+                                    }}
+                                    className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all border ${
+                                      data.patologie.includes(p) ? 'bg-primary border-primary text-white shadow-sm' : 'bg-white border-gray-100 text-gray-400'
+                                    }`}
+                                  >
+                                    {p}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Altro (specificare)</label>
+                                <input className="input-standard !py-2" value={data.altro_note} onChange={e => {
+                                  const next = {...familyHistory};
+                                  next[member as keyof FamilyHistory].altro_note = e.target.value;
+                                  setFamilyHistory(next);
+                                }} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-8 flex justify-end">
+                            <button
+                              onClick={() => {
+                                const next = {...familyHistory};
+                                next[member as keyof FamilyHistory] = { ...emptyFamilyMember };
+                                setFamilyHistory(next);
+                              }}
+                              className="text-[9px] font-black text-tealAction uppercase tracking-widest border border-tealAction/20 px-4 py-2 rounded-xl hover:bg-tealAction/5 transition-colors"
+                            >
+                              Ripristina nulla da segnalare
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
+
+            {/* 3. Anamnesi Fisiologica Strutturata */}
+            <div className="space-y-8">
+              <h3 className="text-lg font-black text-primary uppercase tracking-tight flex items-center gap-3">
+                <Baby className="text-primary/40" /> 3. Anamnesi Fisiologica
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                {/* Sviluppo */}
+                <div className="space-y-8 p-8 bg-warmWhite/30 rounded-[32px] border border-gray-100">
+                  <h4 className="text-xs font-black text-primary/40 uppercase tracking-[0.2em] border-b border-gray-100 pb-3">Sviluppo Infantile</h4>
+                  <div className="space-y-6">
+                    <PillSelector
+                      label="Gravidanza e Parto"
+                      options={['Regolari', 'Complicazioni']}
+                      value={physioHistory.sviluppo.gravidanza_parto}
+                      onChange={v => setPhysioHistory({...physioHistory, sviluppo: {...physioHistory.sviluppo, gravidanza_parto: v}})}
+                    />
+                    {physioHistory.sviluppo.gravidanza_parto === 'Complicazioni' && (
+                      <textarea className="input-standard h-20 text-xs" placeholder="Specifica complicazioni..." value={physioHistory.sviluppo.gravidanza_note} onChange={e => setPhysioHistory({...physioHistory, sviluppo: {...physioHistory.sviluppo, gravidanza_note: e.target.value}})} />
+                    )}
+                    <PillSelector
+                      label="Sviluppo Psicomotorio"
+                      options={['Regolare', 'Rallentato']}
+                      value={physioHistory.sviluppo.psicomotorio}
+                      onChange={v => setPhysioHistory({...physioHistory, sviluppo: {...physioHistory.sviluppo, psicomotorio: v}})}
+                    />
+                    {physioHistory.sviluppo.psicomotorio === 'Rallentato' && (
+                      <textarea className="input-standard h-20 text-xs" placeholder="Note sviluppo..." value={physioHistory.sviluppo.psicomotorio_note} onChange={e => setPhysioHistory({...physioHistory, sviluppo: {...physioHistory.sviluppo, psicomotorio_note: e.target.value}})} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Pubertà */}
+                <div className="space-y-8 p-8 bg-warmWhite/30 rounded-[32px] border border-gray-100">
+                  <h4 className="text-xs font-black text-primary/40 uppercase tracking-[0.2em] border-b border-gray-100 pb-3">Sviluppo Puberale</h4>
+                  <div className="space-y-6">
+                    <PillSelector
+                      label="Andamento Pubertà"
+                      options={['Regolare', 'Anticipato', 'Ritardato']}
+                      value={physioHistory.puberta.sviluppo_puberale}
+                      onChange={v => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, sviluppo_puberale: v}})}
+                    />
+
+                    {workerData?.sesso?.toUpperCase().startsWith('F') && (
+                      <div className="space-y-6 pt-4 border-t border-gray-100 animate-in fade-in">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase">Menarca (età)</label>
+                            <input type="number" className="input-standard !py-2" value={physioHistory.puberta.menarca_eta} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menarca_eta: parseInt(e.target.value)}})} />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase">Gravidanze (N°)</label>
+                            <input type="number" className="input-standard !py-2" value={physioHistory.puberta.gravidanze_n} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, gravidanze_n: parseInt(e.target.value)}})} />
+                          </div>
+                        </div>
+                        <PillSelector
+                          label="Ciclo Mestruale"
+                          options={['Regolare', 'Irregolare', 'Amenorrea']}
+                          value={physioHistory.puberta.ciclo || 'Regolare'}
+                          onChange={v => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, ciclo: v}})}
+                        />
+                        <div className="flex items-center justify-between">
+                          <PillSelector
+                            label="Menopausa"
+                            options={['No', 'Sì']}
+                            value={physioHistory.puberta.menopausa ? 'Sì' : 'No'}
+                            onChange={v => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menopausa: v === 'Sì'}})}
+                          />
+                          {physioHistory.puberta.menopausa && (
+                            <div className="space-y-1 w-24">
+                              <label className="text-[9px] font-black text-gray-400 uppercase">Età</label>
+                              <input type="number" className="input-standard !py-2" value={physioHistory.puberta.menopausa_eta} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menopausa_eta: parseInt(e.target.value)}})} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Abitudini */}
+                <div className="space-y-8 p-8 bg-warmWhite/30 rounded-[32px] border border-gray-100">
+                  <h4 className="text-xs font-black text-primary/40 uppercase tracking-[0.2em] border-b border-gray-100 pb-3">Stile di Vita</h4>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                          <Cigarette size={16} className="text-primary/30" />
+                        <PillSelector
+                          options={['Non fumatore', 'Ex fumatore', 'Fumatore']}
+                          value={physioHistory.abitudini.fumo}
+                          onChange={v => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo: v}})}
+                        />
+                      </div>
+                      {physioHistory.abitudini.fumo === 'Fumatore' && (
+                        <div className="flex gap-4 pl-7 animate-in slide-in-from-left-2">
+                          <div className="flex-1 space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase">Sigarette/die</label>
+                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_sigarette_die} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_sigarette_die: parseInt(e.target.value)}})} />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase">Anni</label>
+                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_anni} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_anni: parseInt(e.target.value)}})} />
+                          </div>
+                        </div>
+                      )}
+                      {physioHistory.abitudini.fumo === 'Ex fumatore' && (
+                        <div className="pl-7 space-y-1 animate-in slide-in-from-left-2 w-32">
+                           <label className="text-[9px] font-black text-gray-400 uppercase">Anno Cessazione</label>
+                           <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_anno_cessazione} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_anno_cessazione: parseInt(e.target.value)}})} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Beer size={16} className="text-primary/30" />
+                        <PillSelector
+                          options={['No', 'Occasionale', 'Quotidiano']}
+                          value={physioHistory.abitudini.alcol}
+                          onChange={v => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, alcol: v}})}
+                        />
+                      </div>
+                      {physioHistory.abitudini.alcol === 'Quotidiano' && (
+                         <div className="pl-7 space-y-1 animate-in slide-in-from-left-2 w-32">
+                            <label className="text-[9px] font-black text-gray-400 uppercase">Unità/die</label>
+                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.alcol_unita_die} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, alcol_unita_die: parseInt(e.target.value)}})} />
+                         </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Dumbbell size={16} className="text-primary/30" />
+                      <PillSelector
+                        options={['Sedentario', 'Leggera', 'Moderata', 'Intensa']}
+                        value={physioHistory.abitudini.attivita_fisica}
+                        onChange={v => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, attivita_fisica: v}})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dieta e Sonno */}
+                <div className="space-y-8 p-8 bg-warmWhite/30 rounded-[32px] border border-gray-100">
+                  <h4 className="text-xs font-black text-primary/40 uppercase tracking-[0.2em] border-b border-gray-100 pb-3">Dieta, Sonno e Farmaci</h4>
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                      <Utensils size={16} className="text-primary/30" />
+                      <PillSelector
+                        options={['Onnivora', 'Vegetariana', 'Vegana', 'Altro']}
+                        value={physioHistory.abitudini.dieta}
+                        onChange={v => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, dieta: v}})}
+                      />
+                    </div>
+                    {physioHistory.abitudini.dieta === 'Altro' && (
+                      <input className="input-standard !py-2 ml-7" placeholder="Specifica dieta..." value={physioHistory.abitudini.dieta_altro} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, dieta_altro: e.target.value}})} />
+                    )}
+
+                    <div className="flex items-center gap-3">
+                      <Moon size={16} className="text-primary/30" />
+                      <PillSelector
+                        options={['Buona', 'Disturbi occasionali', 'Insonnia']}
+                        value={physioHistory.sonno.qualita}
+                        onChange={v => setPhysioHistory({...physioHistory, sonno: {...physioHistory.sonno, qualita: v}})}
+                      />
+                    </div>
+
+                    <div className="space-y-4 pt-4 border-t border-gray-100">
+                       <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Farmaci Abituali</label>
+                          <textarea className="input-standard h-20 text-xs" value={physioHistory.abitudini.farmaci_abituali} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, farmaci_abituali: e.target.value}})} />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="flex items-center gap-3 cursor-pointer group">
+                             <input type="checkbox" className="hidden" checked={physioHistory.abitudini.nessuna_allergia} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, nessuna_allergia: e.target.checked}})} />
+                             <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${physioHistory.abitudini.nessuna_allergia ? 'bg-primary border-primary' : 'border-gray-200'}`}>
+                                {physioHistory.abitudini.nessuna_allergia && <Check size={14} className="text-white" strokeWidth={4} />}
+                             </div>
+                             <span className="text-xs font-black text-primary/70 uppercase">Nessuna allergia</span>
+                          </label>
+                          {!physioHistory.abitudini.nessuna_allergia && (
+                             <textarea className="input-standard h-20 text-xs animate-in slide-in-from-top-2" placeholder="Note allergie..." value={physioHistory.abitudini.allergie_note} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, allergie_note: e.target.value}})} />
+                          )}
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Anamnesi Patologica */}
+            <div className="space-y-6">
+              <h3 className="text-lg font-black text-primary uppercase tracking-tight flex items-center gap-3">
+                <Clipboard className="text-primary/40" /> 4. Anamnesi Patologica
+              </h3>
+
+              <div className="bg-amber-500/5 border border-amber-500/10 rounded-[32px] p-6 mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-amber-600 font-black flex items-center gap-2 text-sm uppercase tracking-tight">
+                    <Mail size={18} /> Acquisizione Gmail (Referti/Esami)
+                  </h3>
+                  <button onClick={handleAuthAndFetch} disabled={loadingGmail} className="btn-accent flex items-center gap-2 text-[10px] py-2 px-4">
+                    {loadingGmail ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />} Sincronizza
+                  </button>
+                </div>
+                {gmailMessages.length > 0 && (
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                    {gmailMessages.map(msg => (
+                      <div key={msg.id} className="bg-white/80 p-3 rounded-xl border border-amber-500/10 text-[10px] flex justify-between items-center gap-4">
+                        <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
+                        <button onClick={() => importEmailText(msg)} className="text-amber-600 hover:underline font-black uppercase tracking-tighter shrink-0">Importa</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Patologica Remota e Prossima</label>
+                <textarea className="input-standard h-48" placeholder="Descrivi storia clinica, interventi chirurgici, ricoveri..." value={visitForm.anamnesi_patologica} onChange={e => setVisitForm({...visitForm, anamnesi_patologica: e.target.value})} />
+              </div>
+            </div>
+
             <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
               <button onClick={() => setStep(1)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
-              <button onClick={() => setStep(3)} className="btn-teal px-12 py-4">Prossimo Step</button>
+              <button onClick={() => setStep(3)} className="btn-teal px-12 py-4 shadow-2xl shadow-tealAction/20 flex items-center gap-3">Esame Obiettivo <ChevronRight size={18} /></button>
             </div>
           </div>
         )}
