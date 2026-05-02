@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand } from '../lib/db';
+import { executeQuery, runCommand, runCommands } from '../lib/db';
 import {
   ClipboardList, Plus, Trash2, Copy, Shield,
-  AlertCircle, Download, ListChecks, Search, Edit2
+  AlertCircle, Download, ListChecks, Search, Edit2, X
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
@@ -20,6 +20,11 @@ const Protocolli = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [protocolToClone, setProtocolToClone] = useState<any>(null);
+  const [protocolToPreview, setProtocolToPreview] = useState<any>(null);
+  const [targetCompanyId, setTargetCompanyId] = useState('');
 
   const [formData, setFormData] = useState({
     company_id: '',
@@ -80,6 +85,48 @@ const Protocolli = () => {
     setFormData({ ...formData, esami: newExams });
   };
 
+  const recalculateDeadlines = async (protocolId: number, esami: Exam[], periodicitaMesi: number) => {
+    const workers = executeQuery("SELECT id FROM workers WHERE protocol_id = ?", [protocolId]);
+    const commands: { sql: string, params: any[] }[] = [];
+    let updatedCount = 0;
+
+    const minMonths = Math.min(...esami.map(e => e.periodicita), periodicitaMesi);
+
+    for (const worker of workers) {
+      const lastVisit = executeQuery(
+        "SELECT data_visita, scadenza_prossima FROM visits WHERE worker_id = ? ORDER BY data_visita DESC LIMIT 1",
+        [worker.id]
+      )[0];
+
+      if (lastVisit) {
+        const lastDate = new Date(lastVisit.data_visita);
+        const newExpiry = new Date(lastDate);
+        newExpiry.setMonth(newExpiry.getMonth() + minMonths);
+        const newExpiryStr = newExpiry.toISOString().split('T')[0];
+
+        if (newExpiryStr !== lastVisit.scadenza_prossima) {
+          commands.push({
+            sql: "UPDATE visits SET scadenza_prossima = ? WHERE worker_id = ? AND data_visita = ?",
+            params: [newExpiryStr, worker.id, lastVisit.data_visita]
+          });
+
+          commands.push({
+            sql: "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+            params: ["UPDATE_EXPIRY", "visits", worker.id, `Ricalcolo scadenza per cambio protocollo: da ${lastVisit.scadenza_prossima} a ${newExpiryStr}`]
+          });
+
+          updatedCount++;
+        }
+      }
+    }
+
+    if (commands.length > 0) {
+      await runCommands(commands);
+    }
+
+    return updatedCount;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
@@ -94,6 +141,11 @@ const Protocolli = () => {
           formData.periodicita_mesi, formData.is_customizable, editingId
         ]
       );
+
+      const updatedCount = await recalculateDeadlines(editingId, formData.esami, formData.periodicita_mesi);
+      if (updatedCount > 0) {
+        alert(`Protocollo aggiornato. Ricalcolate le scadenze per ${updatedCount} lavoratori.`);
+      }
     } else {
       await runCommand(
         `INSERT INTO protocols (company_id, mansione, homogeneous_group, risks, esami, periodicita_mesi, is_customizable)
@@ -124,13 +176,22 @@ const Protocolli = () => {
     });
   };
 
-  const handleClone = (p: any) => {
+  const handleCloneClick = (p: any) => {
+    setProtocolToClone(p);
+    setTargetCompanyId('');
+    setShowCloneModal(true);
+  };
+
+  const confirmClone = () => {
+    if (!targetCompanyId || !protocolToClone) return;
+
     setFormData({
-      ...p,
-      company_id: '',
-      mansione: `${p.mansione} (Copia)`
+      ...protocolToClone,
+      company_id: targetCompanyId,
+      mansione: `${protocolToClone.mansione} (Copia)`
     });
     setEditingId(null);
+    setShowCloneModal(false);
     setShowForm(true);
   };
 
@@ -182,6 +243,19 @@ const Protocolli = () => {
       doc.text(`- ${e.nome} (${e.periodicita} mesi) - ${e.obbligatorio ? 'Obbligatorio' : 'Consigliato'}`, 25, y);
       y += 8;
     });
+
+    // Firma e timbro
+    const pageHeight = doc.internal.pageSize.height;
+    y = pageHeight - 60;
+    doc.line(20, y, 90, y);
+    doc.line(120, y, 190, y);
+
+    doc.setFontSize(8);
+    doc.text("Firma del Medico Competente", 55, y + 5, { align: 'center' });
+    doc.text("Firma del Datore di Lavoro", 155, y + 5, { align: 'center' });
+
+    doc.text(`Data: ${new Date().toLocaleDateString('it-IT')}`, 20, y + 15);
+    doc.text("Timbro dell'Azienda", 120, y + 15);
 
     doc.save(`Protocollo_${p.azienda}_${p.mansione}.pdf`);
   };
@@ -421,9 +495,10 @@ const Protocolli = () => {
                   </td>
                   <td>
                     <div className="flex justify-center gap-2">
+                      <button onClick={() => { setProtocolToPreview(p); setShowPreviewModal(true); }} className="p-3 hover:bg-primary/5 text-gray-400 hover:text-primary rounded-2xl transition-all" title="Anteprima"><Search size={18} /></button>
                       <button onClick={() => handleEdit(p)} className="p-3 hover:bg-primary/5 text-gray-400 hover:text-primary rounded-2xl transition-all"><Edit2 size={18} /></button>
-                      <button onClick={() => handleClone(p)} className="p-3 hover:bg-tealAction/5 text-gray-400 hover:text-tealAction rounded-2xl transition-all"><Copy size={18} /></button>
-                      <button onClick={() => generateProtocolPDF(p)} className="p-3 hover:bg-primary/5 text-gray-400 hover:text-primary rounded-2xl transition-all"><Download size={18} /></button>
+                      <button onClick={() => handleCloneClick(p)} className="p-3 hover:bg-tealAction/5 text-gray-400 hover:text-tealAction rounded-2xl transition-all" title="Clona"><Copy size={18} /></button>
+                      <button onClick={() => generateProtocolPDF(p)} className="p-3 hover:bg-primary/5 text-gray-400 hover:text-primary rounded-2xl transition-all" title="Scarica PDF"><Download size={18} /></button>
                       <button onClick={() => handleDelete(p.id)} className="p-3 hover:bg-accent/10 text-accent rounded-2xl transition-all"><Trash2 size={18} /></button>
                     </div>
                   </td>
@@ -441,6 +516,116 @@ const Protocolli = () => {
           </div>
         )}
       </div>
+
+      {/* Modal Clonazione */}
+      {showCloneModal && (
+        <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-white">
+            <h3 className="text-xl font-black text-primary mb-6">Clona Mansione</h3>
+            <p className="text-sm text-gray-500 mb-6">Seleziona l'azienda di destinazione per la copia della mansione <strong>{protocolToClone?.mansione}</strong>.</p>
+
+            <div className="flex flex-col gap-2 mb-8">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Azienda di Destinazione</label>
+              <select
+                required
+                className="input-standard"
+                value={targetCompanyId}
+                onChange={e => setTargetCompanyId(e.target.value)}
+              >
+                <option value="">Seleziona Azienda...</option>
+                {aziende.map(a => <option key={a.id} value={a.id}>{a.ragione_sociale}</option>)}
+              </select>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowCloneModal(false)} className="flex-1 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-primary transition-colors">Annulla</button>
+              <button onClick={confirmClone} disabled={!targetCompanyId} className="flex-[2] btn-teal py-3 shadow-xl disabled:opacity-50">Conferma Copia</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Anteprima */}
+      {showPreviewModal && protocolToPreview && (
+        <div className="fixed inset-0 bg-primary/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] p-10 max-w-3xl w-full shadow-2xl border border-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-primary tracking-tight">Anteprima Protocollo</h3>
+                <p className="text-sm font-bold text-tealAction uppercase tracking-widest">{protocolToPreview.azienda} | {protocolToPreview.mansione}</p>
+              </div>
+              <button onClick={() => setShowPreviewModal(false)} className="text-gray-300 hover:text-accent transition-colors"><X size={24} /></button>
+            </div>
+
+            <div className="space-y-8">
+              <section>
+                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Rischi Associati</h4>
+                <div className="flex flex-wrap gap-2">
+                  {protocolToPreview.risks.map((r: string, i: number) => (
+                    <span key={i} className="bg-primary/5 text-primary px-3 py-1 rounded-xl text-xs font-black uppercase tracking-tighter border border-primary/5">{r}</span>
+                  ))}
+                  {protocolToPreview.risks.length === 0 && <p className="text-sm text-gray-400 italic">Nessun rischio associato</p>}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Piano Accertamenti</h4>
+                <div className="bg-warmWhite/30 rounded-3xl border border-gray-100 overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-100/50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase">Esame</th>
+                        <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase">Periodicità</th>
+                        <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase text-center">Stato</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {protocolToPreview.esami.map((e: Exam, i: number) => (
+                        <tr key={i}>
+                          <td className="px-6 py-4 text-xs font-black text-primary uppercase">{e.nome}</td>
+                          <td className="px-6 py-4 text-xs font-bold text-gray-500">{e.periodicita} mesi</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg ${e.obbligatorio ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-50 text-gray-400 border border-gray-100'}`}>
+                              {e.obbligatorio ? 'Obbligatorio' : 'Consigliato'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="bg-tealAction/5 p-6 rounded-3xl border border-tealAction/10">
+                <h4 className="text-xs font-black text-tealAction uppercase tracking-widest mb-2">Simulazione Prossima Scadenza</h4>
+                <p className="text-sm text-gray-600 mb-4">Basata sulla periodicità minima del protocollo ({Math.min(...protocolToPreview.esami.map((e: Exam) => e.periodicita), protocolToPreview.periodicita_mesi)} mesi).</p>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 bg-white p-4 rounded-2xl border border-tealAction/20">
+                    <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Esempio: Visita oggi</p>
+                    <p className="text-lg font-black text-primary">{new Date().toLocaleDateString('it-IT')}</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-tealAction/20 flex items-center justify-center text-tealAction">→</div>
+                  <div className="flex-1 bg-white p-4 rounded-2xl border border-tealAction/20">
+                    <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Prossima Scadenza</p>
+                    <p className="text-lg font-black text-accent">
+                      {(() => {
+                        const minMonths = Math.min(...protocolToPreview.esami.map((e: Exam) => e.periodicita), protocolToPreview.periodicita_mesi);
+                        const date = new Date();
+                        date.setMonth(date.getMonth() + minMonths);
+                        return date.toLocaleDateString('it-IT');
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className="mt-10 flex justify-end">
+               <button onClick={() => setShowPreviewModal(false)} className="btn-teal px-10">Chiudi Anteprima</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
