@@ -116,7 +116,7 @@ const NuovaVisita = () => {
             try {
               const customExams = JSON.parse(fullWorker.custom_protocol as string);
               if (customExams.length > 0) {
-          months = Math.min(...customExams.map((e: { periodicita?: number }) => e.periodicita || 12));
+                months = Math.min(...customExams.map((e: { periodicita?: number }) => e.periodicita || 12));
               }
             } catch (e) {
               console.error("Error parsing custom protocol", e);
@@ -133,7 +133,6 @@ const NuovaVisita = () => {
     }
   }, [selectedWorkerId, lavoratori]);
 
-  // Re-define handleAuthAndFetch to match the callback pattern expected by GSI
   const handleGmailSync = async () => {
     const clientId = await get('google_client_id');
     if (!clientId) {
@@ -148,9 +147,10 @@ const NuovaVisita = () => {
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
         callback: async (response: TokenResponse) => {
-          if (response.access_token && workerData) {
+          if (response.access_token) {
             setAccessToken(response.access_token);
-            const msgs = await fetchGmailMessages(response.access_token, workerData.email);
+            // Fix instruction 1: workerData?.email ?? ''
+            const msgs = await fetchGmailMessages(response.access_token, workerData?.email ?? '');
             setGmailMessages(msgs);
           }
           setLoadingGmail(false);
@@ -213,8 +213,8 @@ const NuovaVisita = () => {
       );
 
       // 2. Insert Biometrics
-      const peso = typeof visitForm.peso === 'number' ? visitForm.peso : 0;
-      const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : 1; // avoid div by zero
+      const peso = typeof visitForm.peso === 'number' ? visitForm.peso : parseFloat(visitForm.peso as string) || 0;
+      const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : parseFloat(visitForm.altezza as string) || 1; // avoid div by zero
       const bmi = peso / ((altezza / 100) ** 2);
 
       await runCommand(`
@@ -239,7 +239,9 @@ const NuovaVisita = () => {
   };
 
   const generatePDF = () => {
+    // Fix instruction 2: guard
     if (!workerData) return;
+
     const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
     const doctorData = (doctorDataResults[0] || {}) as { nome?: string; specializzazione?: string; n_iscrizione?: string };
     const doc = new jsPDF();
@@ -252,10 +254,11 @@ const NuovaVisita = () => {
 
     doc.setFont("helvetica", "normal");
     doc.rect(15, 35, 180, 45);
-    doc.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 45);
-    doc.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${workerData.azienda}`, 20, 57);
-    doc.text(`Mansione: ${workerData.mansione}`, 20, 63);
+    // Fix instruction 3: workerData?.campo ?? ''
+    doc.text(`Lavoratore: ${workerData?.cognome ?? ''} ${workerData?.nome ?? ''}`, 20, 45);
+    doc.text(`Codice Fiscale: ${workerData?.codice_fiscale ?? 'N/D'}`, 20, 51);
+    doc.text(`Azienda: ${workerData?.azienda ?? ''}`, 20, 57);
+    doc.text(`Mansione: ${workerData?.mansione ?? ''}`, 20, 63);
     doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
     doc.text(`Tipo Visita: ${visitForm.tipo_visita.toUpperCase()}`, 20, 75);
 
@@ -280,7 +283,7 @@ const NuovaVisita = () => {
     doc.line(130, signatureY + 14, 190, signatureY + 14);
     doc.text("Firma del Medico Competente", 135, signatureY + 19);
 
-    doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+    doc.save(`Giudizio_${workerData?.cognome ?? ''}_${visitForm.data_visita}.pdf`);
 
     // CARTELLA SANITARIA E DI RISCHIO
     const cartella = new jsPDF();
@@ -292,8 +295,8 @@ const NuovaVisita = () => {
 
     cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
     cartella.setFont("helvetica", "normal");
-    cartella.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 47);
-    cartella.text(`Azienda: ${workerData.azienda} | Mansione: ${workerData.mansione}`, 20, 53);
+    cartella.text(`Lavoratore: ${workerData?.cognome ?? ''} ${workerData?.nome ?? ''}`, 20, 47);
+    cartella.text(`Azienda: ${workerData?.azienda ?? ''} | Mansione: ${workerData?.mansione ?? ''}`, 20, 53);
 
     cartella.setFont("helvetica", "bold");
     cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
@@ -341,12 +344,12 @@ const NuovaVisita = () => {
       cartella.text(visitForm.accertamenti_effettuati, 25, currentY + 6, { maxWidth: 165 });
     }
 
-    cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+    cartella.save(`Cartella_3A_${workerData?.cognome ?? ''}_${visitForm.data_visita}.pdf`);
   };
 
   const calculateBMI = () => {
-    const peso = typeof visitForm.peso === 'number' ? visitForm.peso : parseFloat(visitForm.peso);
-    const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : parseFloat(visitForm.altezza);
+    const peso = typeof visitForm.peso === 'number' ? visitForm.peso : parseFloat(visitForm.peso as string);
+    const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : parseFloat(visitForm.altezza as string);
     if (peso && altezza) {
       return (peso / ((altezza / 100) ** 2)).toFixed(1);
     }
@@ -401,8 +404,8 @@ const NuovaVisita = () => {
             {workerData && (
               <div className="bg-tealAction/5 p-6 rounded-3xl border border-tealAction/10 flex justify-between items-center group hover:bg-tealAction/10 transition-colors">
                 <div>
-                  <p className="text-tealAction font-black text-lg uppercase tracking-tight">{workerData.azienda}</p>
-                  <p className="text-gray-500 font-bold text-sm">Mansione: <span className="text-primary font-black">{workerData.mansione}</span></p>
+                  <p className="text-tealAction font-black text-lg uppercase tracking-tight">{workerData?.azienda ?? ''}</p>
+                  <p className="text-gray-500 font-bold text-sm">Mansione: <span className="text-primary font-black">{workerData?.mansione ?? ''}</span></p>
                 </div>
                 <div className="flex gap-4">
                   <select
@@ -431,7 +434,8 @@ const NuovaVisita = () => {
                 <h2 className="text-2xl font-black tracking-tight">Anamnesi</h2>
               </div>
               <div className="bg-warmWhite/50 p-2 px-4 rounded-2xl border border-gray-100 font-black text-primary uppercase text-xs">
-                {workerData?.cognome} {workerData?.nome}
+                {/* Fix instruction 4 (partially): workerData?.cognome ?? '' */}
+                {workerData?.cognome ?? ''} {workerData?.nome ?? ''}
               </div>
             </div>
 
@@ -600,7 +604,8 @@ const NuovaVisita = () => {
               <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <div className="flex gap-4">
                  <a
-                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData?.cognome}+${workerData?.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
+                  // Fix instruction 4 (partially): workerData?.cognome ?? ''
+                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData?.cognome ?? ''}+${workerData?.nome ?? ''}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
                   target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
                  <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva e Stampa</button>
               </div>

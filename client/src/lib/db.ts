@@ -2,7 +2,24 @@ import initSqlJs, { type Database, type QueryExecResult } from 'sql.js';
 import { get, del } from 'idb-keyval';
 import { loadEncryptedDB, saveEncryptedDB } from './auth';
 import CryptoJS from 'crypto-js';
-import type { Worker } from '../types';
+
+// We'll define the Worker interface here if it's not exported from elsewhere to avoid circular dependencies
+export interface Worker {
+  id: number;
+  company_id: number;
+  nome: string;
+  cognome: string;
+  codice_fiscale: string;
+  email: string;
+  data_nascita: string;
+  luogo_nascita: string;
+  sesso: string;
+  mansione: string;
+  data_assunzione: string;
+  rischi: string;
+  protocol_id: number | null;
+  azienda?: string;
+}
 
 let db: Database | null = null;
 
