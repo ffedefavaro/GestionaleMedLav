@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand, getDB } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, Save } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
+import { getBackupHistory, downloadBackup, type BackupEntry } from '../lib/backupService';
 
 const Settings = () => {
   const [doctor, setDoctor] = useState({
@@ -16,23 +17,39 @@ const Settings = () => {
     clientSecret: ''
   });
 
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<{
+    id: number;
+    timestamp: string;
+    action: string;
+    table_name: string;
+    resource_id: number;
+    details: string;
+  }[]>([]);
+
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
 
   useEffect(() => {
     const data = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
     if (data.length > 0) {
-      setDoctor(data[0]);
+      setDoctor(data[0] as typeof doctor);
     }
     const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
-    setLogs(auditLogs);
+    setLogs(auditLogs as typeof logs);
 
     // Load Google config from IndexedDB
     const loadGoogle = async () => {
-      const cid = await get('google_client_id');
-      const cs = await get('google_client_secret');
+      const cid = await get<string>('google_client_id');
+      const cs = await get<string>('google_client_secret');
       setGoogleConfig({ clientId: cid || '', clientSecret: cs || '' });
     };
     loadGoogle();
+
+    // Load Backup history
+    const loadBackups = async () => {
+      const history = await getBackupHistory();
+      setBackups(history);
+    };
+    loadBackups();
   }, []);
 
   const saveGoogleConfig = async () => {
@@ -253,6 +270,38 @@ const Settings = () => {
                   <Upload size={18} className="text-tealAction group-hover:scale-110 transition-transform" />
                   <input type="file" className="hidden" accept=".sqlite" onChange={handleImportDB} />
                 </label>
+              </div>
+
+              <div className="mt-10 pt-10 border-t border-white/10">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-white/10 rounded-xl"><Save size={18} /></div>
+                  <h3 className="font-black text-xs uppercase tracking-widest">Backup Automatici (Ultimi 7)</h3>
+                </div>
+
+                <div className="space-y-3">
+                  {backups.length === 0 ? (
+                    <p className="text-[10px] font-bold text-white/40 italic">Nessun backup automatico disponibile</p>
+                  ) : (
+                    backups.map((backup) => (
+                      <div key={backup.key} className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between group">
+                        <div>
+                          <p className="text-xs font-black text-white/80">
+                            {new Date(backup.timestamp).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          </p>
+                          <p className="text-[10px] font-bold text-white/40">
+                            Ore {new Date(backup.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => downloadBackup(backup)}
+                          className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+                        >
+                          <Download size={14} className="text-tealAction" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="mt-12 flex flex-col gap-4">
