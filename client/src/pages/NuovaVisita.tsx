@@ -1,24 +1,25 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, FileText, Printer, X } from 'lucide-react';
+import { exportPDF, type Worker, type Visit } from '../lib/pdfGenerator';
 import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
 
 const NuovaVisita = () => {
-  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
-  const [workerData, setWorkerData] = useState<any>(null);
+  const [workerData, setWorkerData] = useState<Worker | null>(null);
   const [step, setStep] = useState(1);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Gmail State
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
   const [loadingGmail, setLoadingGmail] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  const [visitForm, setVisitForm] = useState({
+  const [visitForm, setVisitForm] = useState<Visit>({
     data_visita: new Date().toISOString().split('T')[0],
     tipo_visita: 'periodica',
     anamnesi_lavorativa: '',
@@ -46,10 +47,6 @@ const NuovaVisita = () => {
     eo_altro: ''
   });
 
-  useEffect(() => {
-    fetchWorkers();
-  }, []);
-
   const fetchWorkers = () => {
     const data = executeQuery(`
       SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, workers.codice_fiscale, companies.ragione_sociale as azienda
@@ -58,6 +55,10 @@ const NuovaVisita = () => {
     `);
     setLavoratori(data);
   };
+
+  useEffect(() => {
+    fetchWorkers();
+  }, []);
 
   useEffect(() => {
     if (selectedWorkerId) {
@@ -70,15 +71,15 @@ const NuovaVisita = () => {
           FROM workers
           LEFT JOIN protocols ON workers.protocol_id = protocols.id
           WHERE workers.id = ?
-        `, [selectedWorkerId])[0];
+        `, [selectedWorkerId])[0] as any;
 
         if (fullWorker) {
-          let months = fullWorker.protocol_periodicity || 12;
+          let months = (fullWorker.protocol_periodicity as number) || 12;
           if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
             try {
               const customExams = JSON.parse(fullWorker.custom_protocol);
               if (customExams.length > 0) {
-                months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+                months = Math.min(...customExams.map((e: { periodicita?: number }) => e.periodicita || 12));
               }
             } catch (e) {
               console.error("Error parsing custom protocol", e);
@@ -178,104 +179,18 @@ const NuovaVisita = () => {
     }
 
     alert("Visita salvata con successo!");
-    generatePDF();
+    setShowExportModal(true);
+  };
+
+  const handleCloseVisit = () => {
+    setShowExportModal(false);
     setStep(1);
     setSelectedWorkerId('');
   };
 
-  const generatePDF = () => {
+  const handleExport = (mode: 'completa' | 'giudizio' | 'entrambi') => {
     const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
-    const doc = new jsPDF();
-
-    // GIUDIZIO DI IDONEITÀ
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text("(D.Lgs. 81/08 e s.m.i. - Art. 41)", 105, 26, { align: 'center' });
-
-    doc.setFont("helvetica", "normal");
-    doc.rect(15, 35, 180, 45);
-    doc.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 45);
-    doc.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${workerData.azienda}`, 20, 57);
-    doc.text(`Mansione: ${workerData.mansione}`, 20, 63);
-    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
-    doc.text(`Tipo Visita: ${visitForm.tipo_visita.toUpperCase()}`, 20, 75);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO:", 20, 90);
-    doc.setFontSize(14);
-    doc.text(visitForm.giudizio.toUpperCase(), 45, 90);
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    if (visitForm.prescrizioni) {
-      doc.text("Prescrizioni/Limitazioni:", 20, 100);
-      doc.text(visitForm.prescrizioni, 20, 107, { maxWidth: 170 });
-    }
-
-    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 140);
-
-    const signatureY = 170;
-    doc.text(`Dott. ${doctorData.nome || '____________________'}`, 130, signatureY);
-    doc.text(`Spec. ${doctorData.specializzazione || '____________________'}`, 130, signatureY + 6);
-    doc.text(`N. Iscr. ${doctorData.n_iscrizione || '_______'}`, 130, signatureY + 12);
-    doc.line(130, signatureY + 14, 190, signatureY + 14);
-    doc.text("Firma del Medico Competente", 135, signatureY + 19);
-
-    doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
-
-    // CARTELLA SANITARIA E DI RISCHIO
-    const cartella = new jsPDF();
-    cartella.setFontSize(14);
-    cartella.setFont("helvetica", "bold");
-    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 20, { align: 'center' });
-    cartella.setFontSize(10);
-    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 26, { align: 'center' });
-
-    cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 47);
-    cartella.text(`Azienda: ${workerData.azienda} | Mansione: ${workerData.mansione}`, 20, 53);
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
-    cartella.setFont("helvetica", "normal");
-    cartella.text("Lavorativa:", 20, 72);
-    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 78, { maxWidth: 165 });
-    cartella.text("Patologica/Familiare:", 20, 95);
-    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 101, { maxWidth: 165 });
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, 130);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | BMI: ${(visitForm.peso / ((visitForm.altezza/100)**2)).toFixed(1)}`, 20, 137);
-    cartella.text(`PA: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg | FC: ${visitForm.frequenza} bpm | SpO2: ${visitForm.spo2}%`, 20, 143);
-
-    let currentY = 153;
-    const addEOField = (label: string, text: string) => {
-      if (text) {
-        cartella.setFont("helvetica", "bold");
-        cartella.text(`${label}:`, 20, currentY);
-        cartella.setFont("helvetica", "normal");
-        cartella.text(text, 25, currentY + 6, { maxWidth: 165 });
-        currentY += 15;
-      }
-    };
-
-    addEOField("Apparato Cardiovascolare", visitForm.eo_cardiaca);
-    addEOField("Apparato Respiratorio", visitForm.eo_respiratoria);
-    addEOField("Apparato Muscoloscheletrico", [visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle, visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori].filter(v => v).join(" | "));
-    addEOField("Altro", visitForm.eo_altro);
-
-    if (visitForm.accertamenti_effettuati) {
-      cartella.setFont("helvetica", "bold");
-      cartella.text("ACCERTAMENTI STRUMENTALI:", 20, currentY);
-      cartella.setFont("helvetica", "normal");
-      cartella.text(visitForm.accertamenti_effettuati, 25, currentY + 6, { maxWidth: 165 });
-    }
-
-    cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+    exportPDF(mode, workerData, visitForm, doctorData);
   };
 
   const calculateBMI = () => {
@@ -465,7 +380,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                    value={(visitForm as any)[field.id as keyof Visit]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -485,7 +400,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                    value={(visitForm as any)[field.id as keyof Visit]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -534,12 +449,81 @@ const NuovaVisita = () => {
                  <a
                   href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
                   target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
-                 <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva e Stampa</button>
+                 <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva Visita</button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {showExportModal && (
+        <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="glass-card w-full max-w-lg rounded-[40px] overflow-hidden shadow-2xl border-2 border-white">
+            <div className="p-8 bg-primary text-white flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white/10 rounded-2xl">
+                  <Printer size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-tight">Esporta PDF</h3>
+                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">Seleziona modalità di stampa</p>
+                </div>
+              </div>
+              <button onClick={handleCloseVisit} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-10 space-y-4">
+              <button
+                onClick={() => handleExport('completa')}
+                className="w-full flex items-center gap-6 p-6 rounded-3xl border-2 border-gray-100 hover:border-tealAction hover:bg-tealAction/5 transition-all group"
+              >
+                <div className="p-4 bg-gray-50 rounded-2xl group-hover:bg-tealAction/10 group-hover:text-tealAction transition-colors text-gray-400">
+                  <FileText size={32} strokeWidth={1.5} />
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-primary text-lg leading-none">Cartella Sanitaria Completa</p>
+                  <p className="text-gray-400 text-xs font-bold mt-1">Include Allegato 3A completo</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleExport('giudizio')}
+                className="w-full flex items-center gap-6 p-6 rounded-3xl border-2 border-gray-100 hover:border-accent hover:bg-accent/5 transition-all group"
+              >
+                <div className="p-4 bg-gray-50 rounded-2xl group-hover:bg-accent/10 group-hover:text-accent transition-colors text-gray-400">
+                  <Activity size={32} strokeWidth={1.5} />
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-primary text-lg leading-none">Giudizio di Idoneità</p>
+                  <p className="text-gray-400 text-xs font-bold mt-1">Solo ultima sezione sintetica</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleExport('entrambi')}
+                className="w-full flex items-center gap-6 p-6 rounded-3xl border-2 border-tealAction/20 bg-tealAction/5 hover:bg-tealAction/10 transition-all group"
+              >
+                <div className="p-4 bg-tealAction/10 rounded-2xl text-tealAction transition-colors">
+                  <Printer size={32} strokeWidth={1.5} />
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-primary text-lg leading-none">Cartella + Giudizio</p>
+                  <p className="text-gray-400 text-xs font-bold mt-1">Documento unico completo</p>
+                </div>
+              </button>
+
+              <button
+                onClick={handleCloseVisit}
+                className="w-full py-4 text-gray-400 font-black uppercase text-xs tracking-widest hover:text-primary transition-colors pt-6"
+              >
+                Chiudi senza esportare
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
