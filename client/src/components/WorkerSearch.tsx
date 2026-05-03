@@ -1,15 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Building2, X } from 'lucide-react';
+import { Search, Building2, X, Clock } from 'lucide-react';
 import { executeQuery } from '../lib/db';
-
-interface Worker {
-  id: number;
-  nome: string;
-  cognome: string;
-  azienda: string;
-  email: string;
-  mansione: string;
-}
+import { useAppStore, type Worker } from '../store/useAppStore';
 
 interface WorkerSearchProps {
   onSelect: (workerId: string) => void;
@@ -23,6 +15,7 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
   const [isOpen, setIsOpen] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const { recentWorkers, addRecentWorker } = useAppStore();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -56,6 +49,7 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
     setSelectedWorker(worker);
     setQuery(`${worker.cognome} ${worker.nome}`);
     setIsOpen(false);
+    addRecentWorker(worker);
     onSelect(worker.id.toString());
   };
 
@@ -80,7 +74,7 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
             setQuery(e.target.value);
             if (selectedWorker) setSelectedWorker(null);
           }}
-          onFocus={() => query.length >= 2 && setIsOpen(true)}
+          onFocus={() => setIsOpen(true)}
         />
         {query && (
           <button
@@ -92,9 +86,17 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
         )}
       </div>
 
-      {isOpen && results.length > 0 && (
+      {isOpen && (results.length > 0 || (query.length === 0 && recentWorkers.length > 0)) && (
         <div className="absolute z-50 w-full mt-2 bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          {results.map((worker) => (
+          {query.length === 0 && recentWorkers.length > 0 && (
+            <div className="px-4 pt-4 pb-2">
+              <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">
+                <Clock size={12} />
+                Recenti
+              </div>
+            </div>
+          )}
+          {(query.length === 0 ? recentWorkers : results).map((worker) => (
             <button
               key={worker.id}
               onClick={() => handleSelect(worker)}
