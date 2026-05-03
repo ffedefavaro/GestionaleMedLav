@@ -194,7 +194,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
   if (!effectiveDoctor.nome || String(effectiveDoctor.nome).trim() === "") {
     const dbDoctor = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
     if (dbDoctor && dbDoctor.length > 0) {
-      effectiveDoctor = dbDoctor[0];
+      effectiveDoctor = dbDoctor[0] as DoctorProfile;
     }
   }
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand, getDB, anonymizeWorker } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, ShieldCheck, AlertTriangle, Fingerprint } from 'lucide-react';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, ShieldCheck, AlertTriangle, Fingerprint, Save } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
+import { getBackupHistory, downloadBackup, type BackupEntry } from '../lib/backupService';
 import type { DoctorProfile, AuditLog, Worker } from '../types';
 
 const Settings = () => {
@@ -21,8 +22,9 @@ const Settings = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [activeTab, setActiveTab] = useState<'profile' | 'gdpr'>('profile');
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
 
-  const fetchData = () => {
+  const fetchData = async () => {
     const data = executeQuery<DoctorProfile>("SELECT * FROM doctor_profile WHERE id = 1");
     if (data.length > 0) {
       setDoctor(data[0]);
@@ -31,18 +33,19 @@ const Settings = () => {
     setLogs(auditLogs);
     const workerList = executeQuery<Worker>("SELECT * FROM workers ORDER BY cognome ASC");
     setWorkers(workerList);
+
+    // Load Google config from IndexedDB
+    const cid = await get('google_client_id');
+    const cs = await get('google_client_secret');
+    setGoogleConfig({ clientId: cid || '', clientSecret: cs || '' });
+
+    // Load Backup history
+    const history = await getBackupHistory();
+    setBackups(history);
   };
 
   useEffect(() => {
     fetchData();
-
-    // Load Google config from IndexedDB
-    const loadGoogle = async () => {
-      const cid = await get('google_client_id');
-      const cs = await get('google_client_secret');
-      setGoogleConfig({ clientId: cid || '', clientSecret: cs || '' });
-    };
-    loadGoogle();
   }, []);
 
   const saveGoogleConfig = async () => {
@@ -405,6 +408,38 @@ const Settings = () => {
                   <Upload size={18} className="text-tealAction group-hover:scale-110 transition-transform" />
                   <input type="file" className="hidden" accept=".sqlite" onChange={handleImportDB} />
                 </label>
+              </div>
+
+              <div className="mt-10 pt-10 border-t border-white/10">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-white/10 rounded-xl"><Save size={18} /></div>
+                  <h3 className="font-black text-xs uppercase tracking-widest">Backup Automatici (Ultimi 7)</h3>
+                </div>
+
+                <div className="space-y-3">
+                  {backups.length === 0 ? (
+                    <p className="text-[10px] font-bold text-white/40 italic">Nessun backup automatico disponibile</p>
+                  ) : (
+                    backups.map((backup) => (
+                      <div key={backup.key} className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between group">
+                        <div>
+                          <p className="text-xs font-black text-white/80">
+                            {new Date(backup.timestamp).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          </p>
+                          <p className="text-[10px] font-bold text-white/40">
+                            Ore {new Date(backup.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => downloadBackup(backup)}
+                          className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+                        >
+                          <Download size={14} className="text-tealAction" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="mt-12 flex flex-col gap-4">
