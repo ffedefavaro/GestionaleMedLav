@@ -109,7 +109,7 @@ const NuovaVisita = () => {
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
         callback: async (response: any) => {
-          if (response.access_token) {
+          if (response.access_token && workerData?.email) {
             setAccessToken(response.access_token);
             const msgs = await fetchGmailMessages(response.access_token, workerData.email);
             setGmailMessages(msgs);
@@ -189,6 +189,7 @@ const NuovaVisita = () => {
   };
 
   const handleExport = (mode: 'completa' | 'giudizio' | 'entrambi') => {
+    if (!workerData) return;
     const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
     exportPDF(mode, workerData, visitForm, doctorData);
   };
@@ -278,7 +279,7 @@ const NuovaVisita = () => {
                 <h2 className="text-2xl font-black tracking-tight">Anamnesi</h2>
               </div>
               <div className="bg-warmWhite/50 p-2 px-4 rounded-2xl border border-gray-100 font-black text-primary uppercase text-xs">
-                {workerData.cognome} {workerData.nome}
+                {workerData?.cognome} {workerData?.nome}
               </div>
             </div>
 
@@ -447,7 +448,7 @@ const NuovaVisita = () => {
               <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <div className="flex gap-4">
                  <a
-                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
+                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData?.cognome}+${workerData?.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
                   target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
                  <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva Visita</button>
               </div>
