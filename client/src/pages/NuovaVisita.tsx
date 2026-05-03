@@ -2,15 +2,51 @@ import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
+import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
 
+interface Worker {
+  id: number;
+  nome: string;
+  cognome: string;
+  mansione: string;
+  email: string;
+  codice_fiscale: string;
+  azienda: string;
+}
+
+interface VisitForm {
+  data_visita: string;
+  tipo_visita: string;
+  anamnesi_lavorativa: string;
+  anamnesi_familiare: string;
+  anamnesi_patologica: string;
+  giudizio: string;
+  prescrizioni: string;
+  accertamenti_effettuati: string;
+  scadenza_prossima: string;
+  peso: number | string;
+  altezza: number | string;
+  p_sistolica: number | string;
+  p_diastolica: number | string;
+  frequenza: number | string;
+  spo2: number | string;
+  eo_cardiaca: string;
+  eo_respiratoria: string;
+  eo_cervicale: string;
+  eo_dorsolombare: string;
+  eo_spalle: string;
+  eo_arti_superiori: string;
+  eo_arti_inferiori: string;
+  eo_altro: string;
+}
+
 const NuovaVisita = () => {
-  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
-  const [workerData, setWorkerData] = useState<any>(null);
+  const [workerData, setWorkerData] = useState<Worker | null>(null);
   const [step, setStep] = useState(1);
 
   // Gmail State
@@ -18,7 +54,7 @@ const NuovaVisita = () => {
   const [loadingGmail, setLoadingGmail] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  const [visitForm, setVisitForm] = useState({
+  const [visitForm, setVisitForm] = useState<VisitForm>({
     data_visita: new Date().toISOString().split('T')[0],
     tipo_visita: 'periodica',
     anamnesi_lavorativa: '',
@@ -29,12 +65,12 @@ const NuovaVisita = () => {
     accertamenti_effettuati: '',
     scadenza_prossima: '',
     // Biometrics
-    peso: 70,
-    altezza: 170,
-    p_sistolica: 120,
-    p_diastolica: 80,
-    frequenza: 70,
-    spo2: 98,
+    peso: '',
+    altezza: '',
+    p_sistolica: '',
+    p_diastolica: '',
+    frequenza: '',
+    spo2: '',
     // Structured Physical Exam
     eo_cardiaca: '',
     eo_respiratoria: '',
@@ -56,7 +92,7 @@ const NuovaVisita = () => {
       FROM workers
       JOIN companies ON workers.company_id = companies.id
     `);
-    setLavoratori(data);
+    setLavoratori(data as Worker[]);
   };
 
   useEffect(() => {
@@ -65,20 +101,22 @@ const NuovaVisita = () => {
       if (data) {
         setWorkerData(data);
 
-        const fullWorker = executeQuery(`
+        const fullWorkerResults = executeQuery(`
           SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
           FROM workers
           LEFT JOIN protocols ON workers.protocol_id = protocols.id
           WHERE workers.id = ?
-        `, [selectedWorkerId])[0];
+        `, [selectedWorkerId]);
+
+        const fullWorker = fullWorkerResults[0];
 
         if (fullWorker) {
-          let months = fullWorker.protocol_periodicity || 12;
+          let months = (fullWorker.protocol_periodicity as number) || 12;
           if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
             try {
-              const customExams = JSON.parse(fullWorker.custom_protocol);
+              const customExams = JSON.parse(fullWorker.custom_protocol as string);
               if (customExams.length > 0) {
-                months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+          months = Math.min(...customExams.map((e: { periodicita?: number }) => e.periodicita || 12));
               }
             } catch (e) {
               console.error("Error parsing custom protocol", e);
@@ -95,7 +133,8 @@ const NuovaVisita = () => {
     }
   }, [selectedWorkerId, lavoratori]);
 
-  const handleAuthAndFetch = async () => {
+  // Re-define handleAuthAndFetch to match the callback pattern expected by GSI
+  const handleGmailSync = async () => {
     const clientId = await get('google_client_id');
     if (!clientId) {
       alert("Configura il Client ID nelle impostazioni prima di usare Gmail.");
@@ -104,11 +143,12 @@ const NuovaVisita = () => {
 
     setLoadingGmail(true);
     try {
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
+      await initGapiClient();
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        callback: async (response: any) => {
-          if (response.access_token) {
+        callback: async (response: TokenResponse) => {
+          if (response.access_token && workerData) {
             setAccessToken(response.access_token);
             const msgs = await fetchGmailMessages(response.access_token, workerData.email);
             setGmailMessages(msgs);
@@ -116,7 +156,7 @@ const NuovaVisita = () => {
           setLoadingGmail(false);
         },
       });
-      client.requestAccessToken();
+      tokenClient.requestAccessToken();
     } catch (e) {
       console.error(e);
       setLoadingGmail(false);
@@ -143,6 +183,8 @@ const NuovaVisita = () => {
   };
 
   const handleSave = async () => {
+    if (!selectedWorkerId || !workerData) return;
+
     // 1. Insert Visit with structured exam fields
     await runCommand(`
       INSERT INTO visits (
@@ -160,21 +202,34 @@ const NuovaVisita = () => {
       visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
     ]);
 
-    const lastVisitData = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
+    const lastVisitResults = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1");
+    const lastVisitData = lastVisitResults[0];
 
     // Log action for legal audit
-    await runCommand(
-      "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
-      ["FINALIZE", "visits", lastVisitData.id, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
-    );
-
-    // 2. Insert Biometrics
     if (lastVisitData) {
-      const bmi = visitForm.peso / ((visitForm.altezza/100) ** 2);
+      await runCommand(
+        "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+        ["FINALIZE", "visits", lastVisitData.id as number, `Visita finalizzata per lavoratore ID: ${selectedWorkerId}`]
+      );
+
+      // 2. Insert Biometrics
+      const peso = typeof visitForm.peso === 'number' ? visitForm.peso : 0;
+      const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : 1; // avoid div by zero
+      const bmi = peso / ((altezza / 100) ** 2);
+
       await runCommand(`
         INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca, spo2)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [lastVisitData.id, visitForm.peso, visitForm.altezza, bmi, visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza, visitForm.spo2]);
+      `, [
+        lastVisitData.id,
+        visitForm.peso || null,
+        visitForm.altezza || null,
+        visitForm.peso && visitForm.altezza ? bmi : null,
+        visitForm.p_sistolica || null,
+        visitForm.p_diastolica || null,
+        visitForm.frequenza || null,
+        visitForm.spo2 || null
+      ]);
     }
 
     alert("Visita salvata con successo!");
@@ -184,7 +239,9 @@ const NuovaVisita = () => {
   };
 
   const generatePDF = () => {
-    const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
+    if (!workerData) return;
+    const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
+    const doctorData = (doctorDataResults[0] || {}) as { nome?: string; specializzazione?: string; n_iscrizione?: string };
     const doc = new jsPDF();
 
     // GIUDIZIO DI IDONEITÀ
@@ -249,8 +306,17 @@ const NuovaVisita = () => {
     cartella.setFont("helvetica", "bold");
     cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, 130);
     cartella.setFont("helvetica", "normal");
-    cartella.text(`Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | BMI: ${(visitForm.peso / ((visitForm.altezza/100)**2)).toFixed(1)}`, 20, 137);
-    cartella.text(`PA: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg | FC: ${visitForm.frequenza} bpm | SpO2: ${visitForm.spo2}%`, 20, 143);
+
+    const pesoText = visitForm.peso ? `${visitForm.peso}kg` : 'N/D';
+    const altezzaText = visitForm.altezza ? `${visitForm.altezza}cm` : 'N/D';
+    const bmiVal = calculateBMI();
+    cartella.text(`Peso: ${pesoText} | Altezza: ${altezzaText} | BMI: ${bmiVal}`, 20, 137);
+
+    const paSist = visitForm.p_sistolica || '--';
+    const paDiast = visitForm.p_diastolica || '--';
+    const freq = visitForm.frequenza || '--';
+    const spo2 = visitForm.spo2 || '--';
+    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm | SpO2: ${spo2}%`, 20, 143);
 
     let currentY = 153;
     const addEOField = (label: string, text: string) => {
@@ -279,8 +345,10 @@ const NuovaVisita = () => {
   };
 
   const calculateBMI = () => {
-    if (visitForm.peso && visitForm.altezza) {
-      return (visitForm.peso / ((visitForm.altezza / 100) ** 2)).toFixed(1);
+    const peso = typeof visitForm.peso === 'number' ? visitForm.peso : parseFloat(visitForm.peso);
+    const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : parseFloat(visitForm.altezza);
+    if (peso && altezza) {
+      return (peso / ((altezza / 100) ** 2)).toFixed(1);
     }
     return '--';
   };
@@ -363,7 +431,7 @@ const NuovaVisita = () => {
                 <h2 className="text-2xl font-black tracking-tight">Anamnesi</h2>
               </div>
               <div className="bg-warmWhite/50 p-2 px-4 rounded-2xl border border-gray-100 font-black text-primary uppercase text-xs">
-                {workerData.cognome} {workerData.nome}
+                {workerData?.cognome} {workerData?.nome}
               </div>
             </div>
 
@@ -372,7 +440,7 @@ const NuovaVisita = () => {
                 <h3 className="text-accent font-black flex items-center gap-2 text-sm uppercase tracking-tight">
                   <Mail size={18} /> Acquisizione Gmail
                 </h3>
-                <button onClick={handleAuthAndFetch} disabled={loadingGmail} className="btn-accent flex items-center gap-2 text-xs py-2 px-4">
+                <button onClick={handleGmailSync} disabled={loadingGmail} className="btn-accent flex items-center gap-2 text-xs py-2 px-4">
                   {loadingGmail ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />} Sincronizza
                 </button>
               </div>
@@ -416,27 +484,27 @@ const NuovaVisita = () => {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-primary/40"><Heart size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Sistolica</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.p_sistolica} onChange={e => setVisitForm({...visitForm, p_sistolica: parseInt(e.target.value)})} />
+                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.p_sistolica} onChange={e => setVisitForm({...visitForm, p_sistolica: e.target.value ? parseInt(e.target.value) : ''})} />
                 <span className="text-[8px] font-bold text-gray-400 uppercase">mmHg</span>
               </div>
               <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-primary/40"><Heart size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Diastolica</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.p_diastolica} onChange={e => setVisitForm({...visitForm, p_diastolica: parseInt(e.target.value)})} />
+                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.p_diastolica} onChange={e => setVisitForm({...visitForm, p_diastolica: e.target.value ? parseInt(e.target.value) : ''})} />
                 <span className="text-[8px] font-bold text-gray-400 uppercase">mmHg</span>
               </div>
               <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-tealAction/40"><Activity size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Frequenza</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-tealAction outline-none" value={visitForm.frequenza} onChange={e => setVisitForm({...visitForm, frequenza: parseInt(e.target.value)})} />
+                <input type="number" className="bg-transparent font-black text-xl text-tealAction outline-none" value={visitForm.frequenza} onChange={e => setVisitForm({...visitForm, frequenza: e.target.value ? parseInt(e.target.value) : ''})} />
                 <span className="text-[8px] font-bold text-gray-400 uppercase">bpm</span>
               </div>
               <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-accent/40"><Weight size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Peso</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-accent outline-none" value={visitForm.peso} onChange={e => setVisitForm({...visitForm, peso: parseFloat(e.target.value)})} />
+                <input type="number" className="bg-transparent font-black text-xl text-accent outline-none" value={visitForm.peso} onChange={e => setVisitForm({...visitForm, peso: e.target.value ? parseFloat(e.target.value) : ''})} />
                 <span className="text-[8px] font-bold text-gray-400 uppercase">kg</span>
               </div>
               <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-accent/40"><Ruler size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">Altezza</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-accent outline-none" value={visitForm.altezza} onChange={e => setVisitForm({...visitForm, altezza: parseInt(e.target.value)})} />
+                <input type="number" className="bg-transparent font-black text-xl text-accent outline-none" value={visitForm.altezza} onChange={e => setVisitForm({...visitForm, altezza: e.target.value ? parseInt(e.target.value) : ''})} />
                 <span className="text-[8px] font-bold text-gray-400 uppercase">cm</span>
               </div>
               <div className="bg-primary/5 p-4 rounded-3xl border border-primary/10 flex flex-col justify-center items-center gap-1">
@@ -445,7 +513,7 @@ const NuovaVisita = () => {
               </div>
               <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-primary/40"><Wind size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">SpO2 %</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.spo2} onChange={e => setVisitForm({...visitForm, spo2: parseInt(e.target.value)})} />
+                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.spo2} onChange={e => setVisitForm({...visitForm, spo2: e.target.value ? parseInt(e.target.value) : ''})} />
               </div>
             </div>
 
@@ -532,7 +600,7 @@ const NuovaVisita = () => {
               <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <div className="flex gap-4">
                  <a
-                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData.cognome}+${workerData.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
+                  href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData?.cognome}+${workerData?.nome}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
                   target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
                  <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva e Stampa</button>
               </div>

@@ -192,7 +192,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
   // BUG FIX 2: Dati medico da Settings (doctor_profile) if empty
   let effectiveDoctor = { ...doctor };
   if (!effectiveDoctor.nome || String(effectiveDoctor.nome).trim() === "") {
-    const dbDoctor = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
+    const dbDoctor = executeQuery("SELECT * FROM doctor_profile WHERE id = 1") as DoctorProfile[];
     if (dbDoctor && dbDoctor.length > 0) {
       effectiveDoctor = dbDoctor[0];
     }
