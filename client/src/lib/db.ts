@@ -1,6 +1,8 @@
-import initSqlJs, { type Database } from 'sql.js';
+import initSqlJs, { type Database, type QueryExecResult } from 'sql.js';
 import { get, del } from 'idb-keyval';
 import { loadEncryptedDB, saveEncryptedDB } from './auth';
+import CryptoJS from 'crypto-js';
+import type { Worker } from '../types';
 
 let db: Database | null = null;
 
@@ -286,31 +288,62 @@ export const saveDB = async () => {
 
 export const getDB = () => db;
 
-export const executeQuery = (sql: string, params?: any[]) => {
+export type QueryParams = (string | number | Uint8Array | null)[];
+
+export const executeQuery = <T = Record<string, any>>(sql: string, params?: QueryParams): T[] => {
   if (!db) throw new Error("Database non inizializzato");
-  const result = db.exec(sql, params);
+  const result: QueryExecResult[] = db.exec(sql, params);
   if (result.length === 0) return [];
 
   const columns = result[0].columns;
   return result[0].values.map(row => {
-    const obj: any = {};
+    const obj: Record<string, any> = {};
     columns.forEach((col, i) => {
       obj[col] = row[i];
     });
-    return obj;
+    return obj as T;
   });
 };
 
-export const runCommand = async (sql: string, params?: any[]) => {
+export const runCommand = async (sql: string, params?: QueryParams) => {
   if (!db) throw new Error("Database non inizializzato");
   db.run(sql, params);
   await saveDB();
 };
 
-export const runCommands = async (commands: { sql: string, params?: any[] }[]) => {
+export const runCommands = async (commands: { sql: string, params?: QueryParams }[]) => {
   if (!db) throw new Error("Database non inizializzato");
   commands.forEach(cmd => {
     db!.run(cmd.sql, cmd.params);
   });
   await saveDB();
+};
+
+export const anonymizeWorker = async (workerId: number) => {
+  if (!db) throw new Error("Database non inizializzato");
+
+  const results = executeQuery<Worker>("SELECT * FROM workers WHERE id = ?", [workerId]);
+  if (results.length === 0) throw new Error("Lavoratore non trovato");
+  const worker = results[0];
+
+  const hashedNome = CryptoJS.SHA256(worker.nome).toString();
+  const hashedCognome = CryptoJS.SHA256(worker.cognome).toString();
+  const hashedCF = worker.codice_fiscale ? CryptoJS.SHA256(worker.codice_fiscale).toString() : null;
+  const hashedEmail = worker.email ? CryptoJS.SHA256(worker.email).toString() : null;
+
+  await runCommands([
+    {
+      sql: `UPDATE workers SET
+            nome = ?,
+            cognome = ?,
+            codice_fiscale = ?,
+            email = ?
+            WHERE id = ?`,
+      params: [hashedNome, hashedCognome, hashedCF, hashedEmail, workerId]
+    },
+    {
+      sql: "INSERT INTO audit_logs (action, table_name, resource_id, details) VALUES (?, ?, ?, ?)",
+      params: ["ANONYMIZE", "workers", workerId, `Anonimizzazione GDPR per lavoratore ID: ${workerId}`]
+    }
+  ]);
 };

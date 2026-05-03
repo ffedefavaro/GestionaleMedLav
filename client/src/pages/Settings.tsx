@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand, getDB } from '../lib/db';
-import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail } from 'lucide-react';
+import { executeQuery, runCommand, getDB, anonymizeWorker } from '../lib/db';
+import { User, Database, Upload, Trash2, Download, History, BadgeCheck, Mail, ShieldCheck, AlertTriangle, Fingerprint } from 'lucide-react';
 import { set, del, get } from 'idb-keyval';
+import type { DoctorProfile, AuditLog, Worker } from '../types';
 
 const Settings = () => {
-  const [doctor, setDoctor] = useState({
+  const [doctor, setDoctor] = useState<DoctorProfile>({
+    id: 1,
     nome: '',
     specializzazione: '',
     n_iscrizione: '',
@@ -16,15 +18,23 @@ const Settings = () => {
     clientSecret: ''
   });
 
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [activeTab, setActiveTab] = useState<'profile' | 'gdpr'>('profile');
 
-  useEffect(() => {
-    const data = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
+  const fetchData = () => {
+    const data = executeQuery<DoctorProfile>("SELECT * FROM doctor_profile WHERE id = 1");
     if (data.length > 0) {
       setDoctor(data[0]);
     }
-    const auditLogs = executeQuery("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
+    const auditLogs = executeQuery<AuditLog>("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 50");
     setLogs(auditLogs);
+    const workerList = executeQuery<Worker>("SELECT * FROM workers ORDER BY cognome ASC");
+    setWorkers(workerList);
+  };
+
+  useEffect(() => {
+    fetchData();
 
     // Load Google config from IndexedDB
     const loadGoogle = async () => {
@@ -91,100 +101,242 @@ const Settings = () => {
     }
   };
 
+  const handleAnonymize = async (id: number, name: string) => {
+    const confirmation = prompt(`ATTENZIONE: L'anonimizzazione di ${name} è IRREVERSIBILE. I dati personali verranno sostituiti da hash non decifrabili, mantenendo i dati clinici per obbligo di legge. Per confermare, scrivi 'ANONIMIZZA':`);
+    if (confirmation === 'ANONIMIZZA') {
+      try {
+        await anonymizeWorker(id);
+        fetchData();
+        alert("Lavoratore anonimizzato con successo.");
+      } catch (error) {
+        console.error(error);
+        alert("Errore durante l'anonimizzazione.");
+      }
+    }
+  };
+
   return (
     <div className="p-10 max-w-7xl mx-auto">
-      <div className="mb-12">
-        <h1 className="text-4xl font-black text-primary tracking-tight">Impostazioni Sistema</h1>
-        <p className="text-gray-500 font-medium mt-2">Configurazione profilo professionale e sicurezza dati</p>
+      <div className="mb-12 flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-black text-primary tracking-tight">Impostazioni Sistema</h1>
+          <p className="text-gray-500 font-medium mt-2">Configurazione profilo professionale e sicurezza dati</p>
+        </div>
+        <div className="flex bg-warmWhite p-1.5 rounded-2xl border border-gray-100 shadow-inner">
+           <button
+            onClick={() => setActiveTab('profile')}
+            className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'profile' ? 'bg-white text-primary shadow-lg' : 'text-gray-400 hover:text-primary'}`}
+           >
+             Profilo & Audit
+           </button>
+           <button
+            onClick={() => setActiveTab('gdpr')}
+            className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'gdpr' ? 'bg-white text-accent shadow-lg' : 'text-gray-400 hover:text-accent'}`}
+           >
+             Privacy & GDPR
+           </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2 space-y-10">
-          {/* Doctor Profile */}
-          <div className="glass-card rounded-[40px] overflow-hidden border-2 border-primary/5">
-            <div className="p-8 bg-primary text-white font-black flex items-center justify-between">
-               <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                    <User size={24} />
+          {activeTab === 'profile' ? (
+            <>
+              {/* Doctor Profile */}
+              <div className="glass-card rounded-[40px] overflow-hidden border-2 border-primary/5">
+                <div className="p-8 bg-primary text-white font-black flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                        <User size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-lg uppercase tracking-tight">Profilo Medico Competente</h2>
+                        <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest leading-none">Dati legali firma documenti</p>
+                      </div>
                   </div>
-                  <div>
-                    <h2 className="text-lg uppercase tracking-tight">Profilo Medico Competente</h2>
-                    <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest leading-none">Dati legali firma documenti</p>
+                </div>
+                <form onSubmit={handleSaveProfile} className="p-10 space-y-8">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome e Cognome Professionale</label>
+                    <input
+                      placeholder="es. Dott. Mario Rossi"
+                      className="input-standard text-lg"
+                      value={doctor.nome}
+                      onChange={e => setDoctor({...doctor, nome: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Specializzazione</label>
+                      <input
+                        placeholder="es. Medicina del Lavoro"
+                        className="input-standard"
+                        value={doctor.specializzazione}
+                        onChange={e => setDoctor({...doctor, specializzazione: e.target.value})}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">N. Iscrizione Ordine</label>
+                      <input
+                        placeholder="es. 12345 (Roma)"
+                        className="input-standard font-mono"
+                        value={doctor.n_iscrizione}
+                        onChange={e => setDoctor({...doctor, n_iscrizione: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-6 border-t border-gray-100 flex justify-end">
+                    <button type="submit" className="btn-teal px-12 py-4 shadow-tealAction/20">
+                      Salva Profilo Medico
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Audit Log */}
+              <div className="glass-card rounded-[40px] overflow-hidden">
+                <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/5 rounded-xl text-primary"><History size={20} /></div>
+                    <h2 className="text-base font-black text-primary uppercase tracking-tight">Registro Tracciabilità (Audit)</h2>
+                  </div>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ultimi 50 eventi</span>
+                </div>
+                <div className="p-0 max-h-96 overflow-y-auto custom-scrollbar">
+                  <table className="table-medical !border-none !border-spacing-y-0">
+                    <thead className="sticky top-0 bg-warmWhite z-10">
+                      <tr className="bg-gray-50/50 backdrop-blur-sm">
+                        <th className="!py-3">Data/Ora</th>
+                        <th className="!py-3">Azione</th>
+                        <th className="!py-3">Dettagli Operazione</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {logs.map(log => (
+                        <tr key={log.id} className="hover:bg-primary/5 transition-colors">
+                          <td className="!py-4 font-mono text-[10px] text-gray-400 !bg-transparent">{log.timestamp}</td>
+                          <td className="!py-4 !bg-transparent">
+                            <span className={`px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-tighter ${log.action === 'ANONYMIZE' ? 'bg-accent/10 text-accent' : 'bg-primary/5 text-primary'}`}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td className="!py-4 text-gray-600 font-bold text-xs !bg-transparent">{log.details}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-10">
+               {/* GDPR Panel */}
+               <div className="glass-card rounded-[40px] overflow-hidden border-2 border-accent/5">
+                  <div className="p-8 bg-accent text-white font-black flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                          <ShieldCheck size={24} />
+                        </div>
+                        <div>
+                          <h2 className="text-lg uppercase tracking-tight">Diritto all'Oblio & Anonimizzazione</h2>
+                          <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest leading-none">Conformità Regolamento UE 2016/679</p>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="p-8 bg-accent/5 border-b border-accent/10">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-white rounded-2xl text-accent shadow-sm">
+                        <AlertTriangle size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-black text-accent uppercase tracking-tight mb-1">Informativa Importante</h4>
+                        <p className="text-[11px] font-medium text-gray-600 leading-relaxed">
+                          L'anonimizzazione sostituisce irreversibilmente i dati identificativi (Nome, Cognome, Codice Fiscale, Email) con hash crittografici.
+                          I dati clinici vengono mantenuti in forma anonima per il rispetto degli obblighi di conservazione quarantennale previsti dalla normativa di medicina del lavoro.
+                          <strong className="block mt-2 text-accent">QUESTA AZIONE NON PUÒ ESSERE ANNULLATA.</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-0">
+                    <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                      <table className="table-medical !border-none !border-spacing-y-0">
+                        <thead className="sticky top-0 bg-warmWhite z-10">
+                          <tr className="bg-gray-50/50 backdrop-blur-sm">
+                            <th className="!py-4">Lavoratore</th>
+                            <th className="!py-4">Codice Fiscale</th>
+                            <th className="!py-4 text-center">Azioni GDPR</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {workers.map(w => {
+                            const isAnonymized = w.nome.length === 64; // SHA256 length
+                            return (
+                              <tr key={w.id} className="hover:bg-accent/5 transition-colors">
+                                <td className="!py-4 !bg-transparent font-black text-primary text-sm">
+                                  {isAnonymized ? (
+                                    <div className="flex items-center gap-2 text-gray-400 italic">
+                                      <Fingerprint size={14} />
+                                      <span className="truncate w-32 font-mono text-[10px]">{w.nome}</span>
+                                    </div>
+                                  ) : (
+                                    `${w.cognome} ${w.nome}`
+                                  )}
+                                </td>
+                                <td className="!py-4 !bg-transparent font-mono text-xs text-gray-500">
+                                  {isAnonymized ? "DATO ANONIMIZZATO" : w.codice_fiscale}
+                                </td>
+                                <td className="!py-4 !bg-transparent text-center">
+                                  {!isAnonymized ? (
+                                    <button
+                                      onClick={() => handleAnonymize(w.id, `${w.cognome} ${w.nome}`)}
+                                      className="bg-accent/10 text-accent hover:bg-accent hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-accent/20"
+                                    >
+                                      Anonimizza
+                                    </button>
+                                  ) : (
+                                    <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest flex items-center justify-center gap-1">
+                                      <BadgeCheck size={12} className="text-tealAction" /> Completato
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+               </div>
+
+               {/* Anonymization History */}
+               <div className="glass-card rounded-[40px] overflow-hidden">
+                  <div className="p-8 border-b border-gray-100 flex items-center gap-3">
+                    <div className="p-2 bg-accent/5 rounded-xl text-accent"><History size={20} /></div>
+                    <h2 className="text-base font-black text-accent uppercase tracking-tight">Log Anonimizzazioni</h2>
+                  </div>
+                  <div className="p-0">
+                    <table className="table-medical !border-none !border-spacing-y-0">
+                      <tbody className="divide-y divide-gray-50">
+                        {logs.filter(l => l.action === 'ANONYMIZE').map(log => (
+                          <tr key={log.id}>
+                            <td className="!py-4 font-mono text-[10px] text-gray-400 w-48">{log.timestamp}</td>
+                            <td className="!py-4 text-gray-600 font-bold text-xs">{log.details}</td>
+                          </tr>
+                        ))}
+                        {logs.filter(l => l.action === 'ANONYMIZE').length === 0 && (
+                          <tr>
+                            <td className="p-8 text-center text-gray-400 text-[10px] font-black uppercase tracking-widest">Nessun evento registrato</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                </div>
             </div>
-            <form onSubmit={handleSaveProfile} className="p-10 space-y-8">
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome e Cognome Professionale</label>
-                <input
-                  placeholder="es. Dott. Mario Rossi"
-                  className="input-standard text-lg"
-                  value={doctor.nome}
-                  onChange={e => setDoctor({...doctor, nome: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Specializzazione</label>
-                  <input
-                    placeholder="es. Medicina del Lavoro"
-                    className="input-standard"
-                    value={doctor.specializzazione}
-                    onChange={e => setDoctor({...doctor, specializzazione: e.target.value})}
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">N. Iscrizione Ordine</label>
-                  <input
-                    placeholder="es. 12345 (Roma)"
-                    className="input-standard font-mono"
-                    value={doctor.n_iscrizione}
-                    onChange={e => setDoctor({...doctor, n_iscrizione: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className="pt-6 border-t border-gray-100 flex justify-end">
-                <button type="submit" className="btn-teal px-12 py-4 shadow-tealAction/20">
-                   Salva Profilo Medico
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Audit Log */}
-          <div className="glass-card rounded-[40px] overflow-hidden">
-            <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <div className="p-2 bg-primary/5 rounded-xl text-primary"><History size={20} /></div>
-                 <h2 className="text-base font-black text-primary uppercase tracking-tight">Registro Tracciabilità (Audit)</h2>
-              </div>
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ultimi 50 eventi</span>
-            </div>
-            <div className="p-0 max-h-96 overflow-y-auto custom-scrollbar">
-              <table className="table-medical !border-none !border-spacing-y-0">
-                <thead className="sticky top-0 bg-warmWhite z-10">
-                  <tr className="bg-gray-50/50 backdrop-blur-sm">
-                    <th className="!py-3">Data/Ora</th>
-                    <th className="!py-3">Azione</th>
-                    <th className="!py-3">Dettagli Operazione</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {logs.map(log => (
-                    <tr key={log.id} className="hover:bg-primary/5 transition-colors">
-                      <td className="!py-4 font-mono text-[10px] text-gray-400 !bg-transparent">{log.timestamp}</td>
-                      <td className="!py-4 !bg-transparent">
-                        <span className="bg-primary/5 text-primary px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-tighter">
-                          {log.action}
-                        </span>
-                      </td>
-                      <td className="!py-4 text-gray-600 font-bold text-xs !bg-transparent">{log.details}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="space-y-10">
