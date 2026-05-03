@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { exportPDF } from '../lib/pdfGenerator';
 import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
@@ -239,112 +239,10 @@ const NuovaVisita = () => {
   };
 
   const generatePDF = () => {
-    // Fix instruction 2: guard
     if (!workerData) return;
-
-    const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
-    const doctorData = (doctorDataResults[0] || {}) as { nome?: string; specializzazione?: string; n_iscrizione?: string };
-    const doc = new jsPDF();
-
-    // GIUDIZIO DI IDONEITÀ
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text("(D.Lgs. 81/08 e s.m.i. - Art. 41)", 105, 26, { align: 'center' });
-
-    doc.setFont("helvetica", "normal");
-    doc.rect(15, 35, 180, 45);
-    // Fix instruction 3: workerData?.campo ?? ''
-    doc.text(`Lavoratore: ${workerData?.cognome ?? ''} ${workerData?.nome ?? ''}`, 20, 45);
-    doc.text(`Codice Fiscale: ${workerData?.codice_fiscale ?? 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${workerData?.azienda ?? ''}`, 20, 57);
-    doc.text(`Mansione: ${workerData?.mansione ?? ''}`, 20, 63);
-    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
-    doc.text(`Tipo Visita: ${visitForm.tipo_visita.toUpperCase()}`, 20, 75);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO:", 20, 90);
-    doc.setFontSize(14);
-    doc.text(visitForm.giudizio.toUpperCase(), 45, 90);
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    if (visitForm.prescrizioni) {
-      doc.text("Prescrizioni/Limitazioni:", 20, 100);
-      doc.text(visitForm.prescrizioni, 20, 107, { maxWidth: 170 });
-    }
-
-    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 140);
-
-    const signatureY = 170;
-    doc.text(`Dott. ${doctorData.nome || '____________________'}`, 130, signatureY);
-    doc.text(`Spec. ${doctorData.specializzazione || '____________________'}`, 130, signatureY + 6);
-    doc.text(`N. Iscr. ${doctorData.n_iscrizione || '_______'}`, 130, signatureY + 12);
-    doc.line(130, signatureY + 14, 190, signatureY + 14);
-    doc.text("Firma del Medico Competente", 135, signatureY + 19);
-
-    doc.save(`Giudizio_${workerData?.cognome ?? ''}_${visitForm.data_visita}.pdf`);
-
-    // CARTELLA SANITARIA E DI RISCHIO
-    const cartella = new jsPDF();
-    cartella.setFontSize(14);
-    cartella.setFont("helvetica", "bold");
-    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 20, { align: 'center' });
-    cartella.setFontSize(10);
-    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 26, { align: 'center' });
-
-    cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Lavoratore: ${workerData?.cognome ?? ''} ${workerData?.nome ?? ''}`, 20, 47);
-    cartella.text(`Azienda: ${workerData?.azienda ?? ''} | Mansione: ${workerData?.mansione ?? ''}`, 20, 53);
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
-    cartella.setFont("helvetica", "normal");
-    cartella.text("Lavorativa:", 20, 72);
-    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 78, { maxWidth: 165 });
-    cartella.text("Patologica/Familiare:", 20, 95);
-    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 101, { maxWidth: 165 });
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, 130);
-    cartella.setFont("helvetica", "normal");
-
-    const pesoText = visitForm.peso ? `${visitForm.peso}kg` : 'N/D';
-    const altezzaText = visitForm.altezza ? `${visitForm.altezza}cm` : 'N/D';
-    const bmiVal = calculateBMI();
-    cartella.text(`Peso: ${pesoText} | Altezza: ${altezzaText} | BMI: ${bmiVal}`, 20, 137);
-
-    const paSist = visitForm.p_sistolica || '--';
-    const paDiast = visitForm.p_diastolica || '--';
-    const freq = visitForm.frequenza || '--';
-    const spo2 = visitForm.spo2 || '--';
-    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm | SpO2: ${spo2}%`, 20, 143);
-
-    let currentY = 153;
-    const addEOField = (label: string, text: string) => {
-      if (text) {
-        cartella.setFont("helvetica", "bold");
-        cartella.text(`${label}:`, 20, currentY);
-        cartella.setFont("helvetica", "normal");
-        cartella.text(text, 25, currentY + 6, { maxWidth: 165 });
-        currentY += 15;
-      }
-    };
-
-    addEOField("Apparato Cardiovascolare", visitForm.eo_cardiaca);
-    addEOField("Apparato Respiratorio", visitForm.eo_respiratoria);
-    addEOField("Apparato Muscoloscheletrico", [visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle, visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori].filter(v => v).join(" | "));
-    addEOField("Altro", visitForm.eo_altro);
-
-    if (visitForm.accertamenti_effettuati) {
-      cartella.setFont("helvetica", "bold");
-      cartella.text("ACCERTAMENTI STRUMENTALI:", 20, currentY);
-      cartella.setFont("helvetica", "normal");
-      cartella.text(visitForm.accertamenti_effettuati, 25, currentY + 6, { maxWidth: 165 });
-    }
-
-    cartella.save(`Cartella_3A_${workerData?.cognome ?? ''}_${visitForm.data_visita}.pdf`);
+    const doctorDataResults = executeQuery('SELECT * FROM doctor_profile WHERE id = 1');
+    const doctorData = (doctorDataResults[0] || {}) as any;
+    exportPDF('entrambi', workerData as any, visitForm as any, doctorData);
   };
 
   const calculateBMI = () => {

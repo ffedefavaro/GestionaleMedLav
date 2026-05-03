@@ -516,3 +516,21 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
 
   return doc;
 };
+
+export const exportPDF = (mode: 'completa' | 'giudizio' | 'entrambi', worker: Worker, visit: Partial<Visit>, doctor: DoctorProfile) => {
+  const params: PDFParams = {
+    mode: mode === 'completa' ? 'full' : mode === 'giudizio' ? 'judgment' : 'combined',
+    visit,
+    worker,
+    company: { ragione_sociale: worker.azienda || 'Non rilevato' } as Company, // Simplified for compatibility
+    doctor,
+    workHistory: { esperienze: [], infortuni: 'Nessuno', malattie_professionali: 'No' }, // Defaults
+    familyHistory: {} as FamilyHistory,
+    physioHistory: {} as PhysiologicalHistory,
+    risks: []
+  };
+
+  const doc = generateCompletePDF(params);
+  const filename = mode === 'giudizio' ? `Giudizio_${worker.cognome}_${visit.data_visita}.pdf` : `Cartella_3A_${worker.cognome}_${visit.data_visita}.pdf`;
+  doc.save(filename);
+};
