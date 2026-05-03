@@ -40,7 +40,7 @@ const WorkerSearch = ({ onSelect, placeholder = "Cerca lavoratore per nome, cogn
       return;
     }
 
-    const searchResults = executeQuery(`
+    const searchResults = executeQuery<Worker>(`
       SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, companies.ragione_sociale as azienda
       FROM workers
       JOIN companies ON workers.company_id = companies.id
