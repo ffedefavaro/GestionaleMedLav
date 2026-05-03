@@ -123,6 +123,7 @@ export interface Visit {
   altezza: number;
   peso: number;
   bmi: number;
+  spo2?: number;
 
   // Esame Obiettivo - Structured Fields
   // Cardiovascolare

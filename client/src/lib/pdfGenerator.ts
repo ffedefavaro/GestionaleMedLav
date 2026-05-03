@@ -98,7 +98,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     let text = "Non rilevato";
     if (value === true) text = "Sì / Presente / Nella norma";
     else if (value === false) text = "No / Assente / Non rilevato";
-    else if (value !== undefined && value !== null && String(value).trim() !== "" && String(value) !== "null") text = String(value);
+    else if (value !== undefined && value !== null && String(value).trim() !== "" && String(value) !== "null" && String(value) !== "NaN") text = String(value);
 
     // Context-aware defaults
     if (text === "Non rilevato" || text === "Nulla da segnalare") {
@@ -211,7 +211,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     addKeyValue(pdf, "Storia Clinica", visit.anamnesi_patologica || "Negativa");
 
     // SEZIONE 10 — ESAME OBIETTIVO
-    const vitalParams = `H: ${visit.altezza}cm | P: ${visit.peso}kg | BMI: ${visit.bmi} | PA: ${visit.p_sistolica}/${visit.p_diastolica} mmHg | FC: ${visit.frequenza} bpm`;
+    const vitalParams = `H: ${visit.altezza || 'N/D'}cm | P: ${visit.peso || 'N/D'}kg | BMI: ${visit.bmi || 'N/D'} | PA: ${visit.p_sistolica || 'N/D'}/${visit.p_diastolica || 'N/D'} mmHg | FC: ${visit.frequenza || 'N/D'} bpm | SpO2: ${visit.spo2 || 'N/D'}%`;
     addKeyValue(pdf, "Parametri Vitali", vitalParams);
     addKeyValue(pdf, "App. Cardiovascolare", `Toni ${visit.eo_toni_puri ? 'puri' : 'impuri'}, ${visit.eo_toni_ritmici ? 'ritmici' : 'aritmici'}. Varici: ${visit.eo_varici ? 'Presenti' : 'Assenti'}`);
     addKeyValue(pdf, "App. Digerente", `Addome ${visit.eo_addome_piano ? 'piano' : 'globoso'}, ${visit.eo_trattabile ? 'trattabile' : 'non trattabile'}`);

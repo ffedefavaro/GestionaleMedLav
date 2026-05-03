@@ -247,6 +247,7 @@ const NuovaVisita = () => {
     p_sistolica: 120,
     p_diastolica: 80,
     frequenza: 70,
+    spo2: 98,
     eo_toni_puri: true,
     eo_toni_ritmici: true,
     eo_varici: false,
@@ -359,7 +360,8 @@ const NuovaVisita = () => {
   const bmi = useMemo(() => {
     if (visitForm.peso && visitForm.altezza) {
       const h = visitForm.altezza / 100;
-      return parseFloat((visitForm.peso / (h * h)).toFixed(1));
+      const val = visitForm.peso / (h * h);
+      return isNaN(val) ? 0 : parseFloat(val.toFixed(1));
     }
     return 0;
   }, [visitForm.peso, visitForm.altezza]);
@@ -390,7 +392,7 @@ const NuovaVisita = () => {
   }, [bmi]);
 
   const getBMIBadge = () => {
-    if (bmi === 0) return null;
+    if (!bmi || bmi === 0) return null;
     if (bmi < 25) return <span className="bg-tealAction text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg shadow-tealAction/20">Normopeso</span>;
     if (bmi < 30) return <span className="bg-amber-400 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg shadow-amber-400/20">Sovrappeso</span>;
     return <span className="bg-red-500 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg shadow-red-500/20">Obeso</span>;
@@ -428,8 +430,17 @@ const NuovaVisita = () => {
 
     setLoadingGmail(true);
     try {
-      const gapi = (window as any).google;
-      const client = gapi.accounts.oauth2.initTokenClient({
+      const gapi = (window as any).gapi;
+      if (!gapi.client.gmail) {
+        await gapi.client.init({
+          clientId: clientId,
+          scope: 'https://www.googleapis.com/auth/gmail.readonly',
+          discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"]
+        });
+      }
+
+      const google = (window as any).google;
+      const client = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
         callback: async (response: { access_token: string }) => {
@@ -474,7 +485,7 @@ const NuovaVisita = () => {
       INSERT INTO visits (
         worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica,
         anamnesi_fisiologica, accertamenti_effettuati, eo_note, giudizio, prescrizioni, scadenza_prossima,
-        condizioni_generali, altezza, peso, bmi, p_sistolica, p_diastolica, frequenza,
+        condizioni_generali, altezza, peso, bmi, p_sistolica, p_diastolica, frequenza, spo2,
         eo_toni_puri, eo_toni_ritmici, eo_varici, eo_addome_piano, eo_trattabile, eo_dolente,
         eo_fegato_regolare, eo_milza_regolare, eo_giordano_dx, eo_giordano_sx,
         eo_pless_norma, eo_ispettivi_norma, eo_tinel, eo_phalen,
@@ -484,7 +495,7 @@ const NuovaVisita = () => {
         visita_completata, allegati_count, trasmissione_lavoratore_data, trasmissione_lavoratore_metodo,
         trasmissione_datore_data, trasmissione_datore_metodo, finalized
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `;
 
     const params = [
@@ -492,7 +503,7 @@ const NuovaVisita = () => {
       JSON.stringify(workHistory), JSON.stringify(familyHistory), visitForm.anamnesi_patologica,
       JSON.stringify(physioHistory), visitForm.accertamenti_effettuati, visitForm.eo_note, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima,
       visitForm.condizioni_generali, visitForm.altezza, visitForm.peso, visitForm.bmi,
-      visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza,
+      visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza, visitForm.spo2,
       visitForm.eo_toni_puri ? 1 : 0, visitForm.eo_toni_ritmici ? 1 : 0, visitForm.eo_varici ? 1 : 0,
       visitForm.eo_addome_piano ? 1 : 0, visitForm.eo_trattabile ? 1 : 0, visitForm.eo_dolente ? 1 : 0,
       visitForm.eo_fegato_regolare ? 1 : 0, visitForm.eo_milza_regolare ? 1 : 0,
@@ -852,11 +863,11 @@ const NuovaVisita = () => {
                       <div className="flex gap-4 animate-in slide-in-from-left-2">
                         <div className="flex-1 space-y-1">
                           <label className="text-[9px] font-black text-gray-400 uppercase">N°</label>
-                          <input type="number" className="input-standard !py-2" value={workHistory.infortuni_n} onChange={e => setWorkHistory({...workHistory, infortuni_n: parseInt(e.target.value)})} />
+                          <input type="number" className="input-standard !py-2" value={workHistory.infortuni_n} onChange={e => setWorkHistory({...workHistory, infortuni_n: parseInt(e.target.value) || 0})} />
                         </div>
                         <div className="flex-1 space-y-1">
                           <label className="text-[9px] font-black text-gray-400 uppercase">Ultimo Anno</label>
-                          <input type="number" className="input-standard !py-2" value={workHistory.infortuni_ultimo_anno} onChange={e => setWorkHistory({...workHistory, infortuni_ultimo_anno: parseInt(e.target.value)})} />
+                          <input type="number" className="input-standard !py-2" value={workHistory.infortuni_ultimo_anno} onChange={e => setWorkHistory({...workHistory, infortuni_ultimo_anno: parseInt(e.target.value) || 0})} />
                         </div>
                         <div className="flex-[2] space-y-1">
                           <label className="text-[9px] font-black text-gray-400 uppercase">Tipo/Dinamica</label>
@@ -880,7 +891,7 @@ const NuovaVisita = () => {
                         </div>
                         <div className="flex-1 space-y-1">
                           <label className="text-[9px] font-black text-gray-400 uppercase">Anno</label>
-                          <input type="number" className="input-standard !py-2" value={workHistory.malattie_professionali_anno} onChange={e => setWorkHistory({...workHistory, malattie_professionali_anno: parseInt(e.target.value)})} />
+                          <input type="number" className="input-standard !py-2" value={workHistory.malattie_professionali_anno} onChange={e => setWorkHistory({...workHistory, malattie_professionali_anno: parseInt(e.target.value) || 0})} />
                         </div>
                       </div>
                     )}
@@ -957,7 +968,7 @@ const NuovaVisita = () => {
                                     <label className="text-[9px] font-black text-gray-400 uppercase">Età decesso</label>
                                     <input type="number" className="input-standard !py-2" value={data.eta_decesso} onChange={e => {
                                       const next = {...familyHistory};
-                                      next[member as keyof FamilyHistory].eta_decesso = parseInt(e.target.value);
+                                      next[member as keyof FamilyHistory].eta_decesso = parseInt(e.target.value) || 0;
                                       setFamilyHistory(next);
                                     }} />
                                   </div>
@@ -1071,11 +1082,11 @@ const NuovaVisita = () => {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <label className="text-[9px] font-black text-gray-400 uppercase">Menarca (età)</label>
-                            <input type="number" className="input-standard !py-2" value={physioHistory.puberta.menarca_eta} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menarca_eta: parseInt(e.target.value)}})} />
+                            <input type="number" className="input-standard !py-2" value={physioHistory.puberta.menarca_eta} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menarca_eta: parseInt(e.target.value) || 0}})} />
                           </div>
                           <div className="space-y-1">
                             <label className="text-[9px] font-black text-gray-400 uppercase">Gravidanze (N°)</label>
-                            <input type="number" className="input-standard !py-2" value={physioHistory.puberta.gravidanze_n} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, gravidanze_n: parseInt(e.target.value)}})} />
+                            <input type="number" className="input-standard !py-2" value={physioHistory.puberta.gravidanze_n} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, gravidanze_n: parseInt(e.target.value) || 0}})} />
                           </div>
                         </div>
                         <PillSelector
@@ -1094,7 +1105,7 @@ const NuovaVisita = () => {
                           {physioHistory.puberta.menopausa && (
                             <div className="space-y-1 w-24">
                               <label className="text-[9px] font-black text-gray-400 uppercase">Età</label>
-                              <input type="number" className="input-standard !py-2" value={physioHistory.puberta.menopausa_eta} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menopausa_eta: parseInt(e.target.value)}})} />
+                              <input type="number" className="input-standard !py-2" value={physioHistory.puberta.menopausa_eta} onChange={e => setPhysioHistory({...physioHistory, puberta: {...physioHistory.puberta, menopausa_eta: parseInt(e.target.value) || 0}})} />
                             </div>
                           )}
                         </div>
@@ -1120,18 +1131,18 @@ const NuovaVisita = () => {
                         <div className="flex gap-4 pl-7 animate-in slide-in-from-left-2">
                           <div className="flex-1 space-y-1">
                             <label className="text-[9px] font-black text-gray-400 uppercase">Sigarette/die</label>
-                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_sigarette_die} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_sigarette_die: parseInt(e.target.value)}})} />
+                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_sigarette_die} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_sigarette_die: parseInt(e.target.value) || 0}})} />
                           </div>
                           <div className="flex-1 space-y-1">
                             <label className="text-[9px] font-black text-gray-400 uppercase">Anni</label>
-                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_anni} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_anni: parseInt(e.target.value)}})} />
+                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_anni} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_anni: parseInt(e.target.value) || 0}})} />
                           </div>
                         </div>
                       )}
                       {physioHistory.abitudini.fumo === 'Ex fumatore' && (
                         <div className="pl-7 space-y-1 animate-in slide-in-from-left-2 w-32">
                            <label className="text-[9px] font-black text-gray-400 uppercase">Anno Cessazione</label>
-                           <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_anno_cessazione} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_anno_cessazione: parseInt(e.target.value)}})} />
+                           <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.fumo_anno_cessazione} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, fumo_anno_cessazione: parseInt(e.target.value) || 0}})} />
                         </div>
                       )}
                     </div>
@@ -1148,7 +1159,7 @@ const NuovaVisita = () => {
                       {physioHistory.abitudini.alcol === 'Quotidiano' && (
                          <div className="pl-7 space-y-1 animate-in slide-in-from-left-2 w-32">
                             <label className="text-[9px] font-black text-gray-400 uppercase">Unità/die</label>
-                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.alcol_unita_die} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, alcol_unita_die: parseInt(e.target.value)}})} />
+                            <input type="number" className="input-standard !py-2" value={physioHistory.abitudini.alcol_unita_die} onChange={e => setPhysioHistory({...physioHistory, abitudini: {...physioHistory.abitudini, alcol_unita_die: parseInt(e.target.value) || 0}})} />
                          </div>
                       )}
                     </div>
@@ -1295,8 +1306,11 @@ const NuovaVisita = () => {
                     <input
                       type="number"
                       className="input-standard font-black pr-12"
-                      value={visitForm.altezza}
-                      onChange={e => setVisitForm({...visitForm, altezza: parseInt(e.target.value)})}
+                      value={visitForm.altezza || ''}
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setVisitForm({...visitForm, altezza: isNaN(val) ? undefined : val});
+                      }}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-300">CM</span>
                   </div>
@@ -1308,10 +1322,29 @@ const NuovaVisita = () => {
                     <input
                       type="number"
                       className="input-standard font-black pr-12"
-                      value={visitForm.peso}
-                      onChange={e => setVisitForm({...visitForm, peso: parseFloat(e.target.value)})}
+                      value={visitForm.peso || ''}
+                      onChange={e => {
+                        const val = parseFloat(e.target.value);
+                        setVisitForm({...visitForm, peso: isNaN(val) ? undefined : val});
+                      }}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-300">KG</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">SpO2 (%)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      className="input-standard font-black pr-12"
+                      value={visitForm.spo2 === undefined ? '' : visitForm.spo2}
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setVisitForm({...visitForm, spo2: isNaN(val) ? undefined : val});
+                      }}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-300">%</span>
                   </div>
                 </div>
 
@@ -1340,15 +1373,24 @@ const NuovaVisita = () => {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PA (Sistolica/Diastolica)</label>
                     <div className="flex items-center gap-2">
-                      <input type="number" className="input-standard w-20 text-center font-black" value={visitForm.p_sistolica} onChange={e => setVisitForm({...visitForm, p_sistolica: parseInt(e.target.value)})} />
+                      <input type="number" className="input-standard w-20 text-center font-black" value={visitForm.p_sistolica || ''} onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setVisitForm({...visitForm, p_sistolica: isNaN(val) ? undefined : val});
+                      }} />
                       <span className="text-gray-300">/</span>
-                      <input type="number" className="input-standard w-20 text-center font-black" value={visitForm.p_diastolica} onChange={e => setVisitForm({...visitForm, p_diastolica: parseInt(e.target.value)})} />
+                      <input type="number" className="input-standard w-20 text-center font-black" value={visitForm.p_diastolica || ''} onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setVisitForm({...visitForm, p_diastolica: isNaN(val) ? undefined : val});
+                      }} />
                       <span className="text-[10px] font-bold text-gray-300 ml-2">mmHg</span>
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">FC (bpm)</label>
-                    <input type="number" className="input-standard w-32 font-black" value={visitForm.frequenza} onChange={e => setVisitForm({...visitForm, frequenza: parseInt(e.target.value)})} />
+                    <input type="number" className="input-standard w-32 font-black" value={visitForm.frequenza || ''} onChange={e => {
+                      const val = parseInt(e.target.value);
+                      setVisitForm({...visitForm, frequenza: isNaN(val) ? undefined : val});
+                    }} />
                   </div>
                   <div className="flex flex-wrap gap-4 items-end pb-2">
                     <label className="flex items-center gap-2 cursor-pointer group">
@@ -1630,11 +1672,17 @@ const NuovaVisita = () => {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <span className="text-[9px] font-bold text-gray-400 uppercase">Naturale</span>
-                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_nat_os} onChange={e => setVisitForm({...visitForm, eo_visus_nat_os: parseFloat(e.target.value)})} />
+                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_nat_os || ''} onChange={e => {
+                              const val = parseFloat(e.target.value);
+                              setVisitForm({...visitForm, eo_visus_nat_os: isNaN(val) ? undefined : val});
+                            }} />
                           </div>
                           <div className="space-y-1">
                             <span className="text-[9px] font-bold text-gray-400 uppercase">Corretto</span>
-                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_corr_os} onChange={e => setVisitForm({...visitForm, eo_visus_corr_os: parseFloat(e.target.value)})} />
+                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_corr_os || ''} onChange={e => {
+                              const val = parseFloat(e.target.value);
+                              setVisitForm({...visitForm, eo_visus_corr_os: isNaN(val) ? undefined : val});
+                            }} />
                           </div>
                         </div>
                       </div>
@@ -1643,11 +1691,17 @@ const NuovaVisita = () => {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <span className="text-[9px] font-bold text-gray-400 uppercase">Naturale</span>
-                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_nat_od} onChange={e => setVisitForm({...visitForm, eo_visus_nat_od: parseFloat(e.target.value)})} />
+                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_nat_od || ''} onChange={e => {
+                              const val = parseFloat(e.target.value);
+                              setVisitForm({...visitForm, eo_visus_nat_od: isNaN(val) ? undefined : val});
+                            }} />
                           </div>
                           <div className="space-y-1">
                             <span className="text-[9px] font-bold text-gray-400 uppercase">Corretto</span>
-                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_corr_od} onChange={e => setVisitForm({...visitForm, eo_visus_corr_od: parseFloat(e.target.value)})} />
+                            <input type="number" className="input-standard font-black" value={visitForm.eo_visus_corr_od || ''} onChange={e => {
+                              const val = parseFloat(e.target.value);
+                              setVisitForm({...visitForm, eo_visus_corr_od: isNaN(val) ? undefined : val});
+                            }} />
                           </div>
                         </div>
                       </div>
@@ -1749,7 +1803,7 @@ const NuovaVisita = () => {
 
                          <div className="flex items-center gap-3">
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Allegati</span>
-                            <input type="number" className="w-16 bg-white border border-gray-100 rounded-xl px-3 py-2 text-xs font-black text-primary outline-none" value={visitForm.allegati_count} onChange={e => setVisitForm({...visitForm, allegati_count: parseInt(e.target.value)})} />
+                            <input type="number" className="w-16 bg-white border border-gray-100 rounded-xl px-3 py-2 text-xs font-black text-primary outline-none" value={visitForm.allegati_count} onChange={e => setVisitForm({...visitForm, allegati_count: parseInt(e.target.value) || 0})} />
                          </div>
                       </div>
 

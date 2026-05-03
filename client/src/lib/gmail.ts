@@ -7,41 +7,73 @@ export interface GmailMessage {
   date: string;
 }
 
-export const initGoogleAuth = (clientId: string) => {
-  return new Promise((resolve) => {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.onload = () => {
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: GMAIL_SCOPE,
-        callback: (response: any) => resolve(response),
-      });
-      resolve(client);
-    };
-    document.body.appendChild(script);
+interface GapiResponse<T> {
+  result: T;
+}
+
+interface GmailListResponse {
+  messages?: { id: string }[];
+}
+
+interface GmailMessageDetail {
+  id: string;
+  snippet: string;
+  payload: {
+    parts?: { mimeType: string; body: { data?: string } }[];
+    body?: { data?: string };
+    headers: { name: string; value: string }[];
+  };
+}
+
+export const initGoogleAuth = (clientId: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const gapi = (window as any).gapi;
+    if (!gapi) {
+      reject(new Error("GAPI library not found"));
+      return;
+    }
+
+    gapi.load('client', async () => {
+      try {
+        await gapi.client.init({
+          clientId: clientId,
+          scope: GMAIL_SCOPE,
+          discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"]
+        });
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    });
   });
 };
 
-export const fetchGmailMessages = async (accessToken: string, workerEmail: string): Promise<GmailMessage[]> => {
-  const query = encodeURIComponent(`from:${workerEmail}`);
-  const response = await fetch(`https://gmail.googleapis.com/v1/users/me/messages?q=${query}&maxResults=10`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
+export const fetchGmailMessages = async (_accessToken: string, workerEmail: string): Promise<GmailMessage[]> => {
+  const gapi = (window as any).gapi;
+  if (!gapi || !gapi.client || !gapi.client.gmail) {
+    throw new Error("GAPI client not initialized");
+  }
+
+  const query = `from:${workerEmail}`;
+  const listRes: GapiResponse<GmailListResponse> = await gapi.client.gmail.users.messages.list({
+    userId: 'me',
+    q: query,
+    maxResults: 10
   });
 
-  const data = await response.json();
-  if (!data.messages) return [];
+  const messagesMetadata = listRes.result.messages;
+  if (!messagesMetadata) return [];
 
-  const messages = await Promise.all(data.messages.map(async (m: any) => {
-    const detailRes = await fetch(`https://gmail.googleapis.com/v1/users/me/messages/${m.id}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
+  const messages = await Promise.all(messagesMetadata.map(async (m) => {
+    const detailRes: GapiResponse<GmailMessageDetail> = await gapi.client.gmail.users.messages.get({
+      userId: 'me',
+      id: m.id
     });
-    const detail = await detailRes.json();
+    const detail = detailRes.result;
 
-    // Extract snippet and simple text body
     let body = "";
     if (detail.payload.parts) {
-      const part = detail.payload.parts.find((p: any) => p.mimeType === 'text/plain');
+      const part = detail.payload.parts.find(p => p.mimeType === 'text/plain');
       if (part && part.body.data) {
         body = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
       }
@@ -49,7 +81,7 @@ export const fetchGmailMessages = async (accessToken: string, workerEmail: strin
       body = atob(detail.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
     }
 
-    const dateHeader = detail.payload.headers.find((h: any) => h.name === 'Date');
+    const dateHeader = detail.payload.headers.find(h => h.name === 'Date');
 
     return {
       id: detail.id,
