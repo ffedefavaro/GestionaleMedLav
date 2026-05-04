@@ -217,7 +217,7 @@ export const sendGiudizio = async (visitId: number, recipients: { worker?: boole
     abitudini: { fumo: 'Non fumatore', alcol: 'No', attivita_fisica: 'Sedentario', dieta: 'Onnivora', nessuna_allergia: true },
     sonno: { qualita: 'Buona' }
   };
-  const risks: string[] = worker.rischi ? JSON.parse(worker.rischi) : [];
+  const risks: string[] = worker.rischi ? (JSON.parse(worker.rischi) as string[]) : [];
 
   // 2. Generate PDF (Judgment Mode)
   const doc = generateCompletePDF({
