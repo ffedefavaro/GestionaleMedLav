@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
 import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase, ShieldCheck } from 'lucide-react';
 import { generateCompletePDF, type Visit as PDFVisit, type Worker as PDFWorker, type Company as PDFCompany, type DoctorProfile as PDFDoctor } from '../lib/pdfGenerator';
-import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse } from '../lib/gmail';
+import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse, analyzeEmailWithAI } from '../lib/gmail';
+import type { EmailAnalysis } from '../types';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
 import WorkerSearch from '../components/WorkerSearch';
@@ -639,7 +640,7 @@ const importAnalysis = (analysis: EmailAnalysis) => {
         <div className="border-t border-accent/10 bg-primary/5 p-3 space-y-2 text-[10px]">
           {analysis.tipoEsame.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {analysis.tipoEsame.map(t => (
+              {analysis.tipoEsame.map((t: string) => (
                 <span key={t} className="bg-primary text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">{t}</span>
               ))}
               {analysis.dataEsame && <span className="text-gray-400 font-bold">{analysis.dataEsame}</span>}

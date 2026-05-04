@@ -294,6 +294,8 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     renderPage2(doc);
     renderPage3(doc, visit, addSectionTitle, addField); // <!-- MODIFICA -->
     renderPage4(doc, visit, company, worker, effectiveDoctor, addSectionTitle, addField); // <!-- MODIFICA -->
+    generatePaginaConsenso(doc, visit, worker);
+    generatePaginaGiudizio(doc, visit, worker, effectiveDoctor);
   }
 
   if (mode === 'judgment') {
@@ -395,4 +397,123 @@ const renderPage4 = (pdf: jsPDF, visit: Partial<Visit>, _company: Company, _work
 
   const totalPages = pdf.getNumberOfPages();
   pdf.text(`Documento composto da n. ${totalPages} pagine e n. 0 allegati.`, 20, y + 5);
+};
+
+/**
+ * Aggiunge una nuova pagina al doc jsPDF con il consenso informato
+ */
+export const generatePaginaConsenso = (doc: jsPDF, visitData: any, _workerData: any): void => {
+  doc.addPage();
+  let y = 30;
+
+  const addLocalSection = (title: string, content: any, currentY: number, defaultValue: string = "Nulla da segnalare"): number => {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setFillColor(240, 240, 240);
+    doc.rect(15, currentY, 180, 7, 'F');
+    doc.text(title.toUpperCase(), 20, currentY + 5);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    const text = (content === null || content === undefined || String(content).trim() === "" || String(content).toLowerCase() === "null") ? defaultValue : String(content);
+    const lines = doc.splitTextToSize(text, 170);
+    doc.text(lines, 20, currentY + 12);
+    return currentY + 12 + (lines.length * 5) + 5;
+  };
+
+  y = addLocalSection("Incidenti/Traumi/Infortuni", visitData.incidenti, y, "Nulla da segnalare");
+  y = addLocalSection("Invalidità riconosciute", visitData.invalidita, y, "Nessuna");
+  y = addLocalSection("Altre notizie utili", visitData.altre_notizie, y, "Nulla da segnalare");
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setFillColor(240, 240, 240);
+  doc.rect(15, y, 180, 7, 'F');
+  doc.text("CONSENSO INFORMATO", 20, y + 5);
+  y += 12;
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  const consensoText = "Il lavoratore dichiara che quanto segnalato nell'anamnesi corrisponde al vero, di essere stato edotto sui rischi professionali e sulle finalità della sorveglianza sanitaria. Esprime il proprio consenso informato all'esecuzione degli accertamenti previsti dal protocollo sanitario e al trattamento dei dati sensibili per fini di medicina del lavoro.";
+  const lines = doc.splitTextToSize(consensoText, 170);
+  doc.text(lines, 20, y);
+  y += (lines.length * 5) + 15;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Data: ____________________", 20, y);
+  doc.text("Firma del lavoratore: ____________________________", 110, y);
+};
+
+/**
+ * Aggiunge una nuova pagina al doc jsPDF con il giudizio di idoneità
+ */
+export const generatePaginaGiudizio = (doc: jsPDF, visitData: any, workerData: any, doctorData: any): void => {
+  doc.addPage();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Azienda: ${workerData.azienda || 'N.D.'}`, 15, y);
+  doc.text(`Data: ${visitData.data_visita || ''}`, 100, y);
+  doc.text(`Tipo: ${visitData.tipo_visita || ''}`, 150, y);
+  y += 10;
+
+  // Esame obiettivo
+  doc.setFillColor(240, 240, 240);
+  doc.rect(15, y, 180, 7, 'F');
+  doc.text("ESAME OBIETTIVO PER APPARATI", 20, y + 5);
+  y += 12;
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  const eo = visitData.esame_obiettivo_strutturato || "Nulla da segnalare";
+  const eoLines = doc.splitTextToSize(eo, 170);
+  doc.text(eoLines, 20, y);
+  y += (eoLines.length * 5) + 10;
+
+  // Giudizio
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("Giudizio di idoneità alla mansione specifica:", 20, y);
+  doc.text(String(visitData.giudizio || "IDONEO").toUpperCase(), 105, y);
+  y += 8;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  if (visitData.prescrizioni) {
+    const pText = `Prescrizioni/Limitazioni: ${visitData.prescrizioni}`;
+    const pLines = doc.splitTextToSize(pText, 170);
+    doc.text(pLines, 20, y);
+    y += (pLines.length * 5) + 2;
+  }
+
+  const dataVisita = visitData.data_visita || '';
+  doc.text(`Data prossima visita: ${visitData.scadenza_prossima || 'N.D.'}`, 20, y);
+  y += 7;
+  doc.text(`Trasmissione al lavoratore: ${dataVisita}`, 20, y);
+  y += 7;
+  doc.text(`Trasmissione al datore: ${dataVisita} a mezzo PEC/Email`, 20, y);
+  y += 15;
+
+  // Firma medico
+  if (doctorData.timbro_immagine) {
+    try {
+        const imgData = doctorData.timbro_immagine.startsWith('data:') ? doctorData.timbro_immagine : `data:image/png;base64,${doctorData.timbro_immagine}`;
+        doc.addImage(imgData, 'PNG', 140, y - 10, 35, 15);
+    } catch(e) {}
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.text(`Dott. ${doctorData.nome || ''}`, 130, y + 10);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text("Firma del Medico Competente", 130, y + 14);
+  y += 25;
+
+  doc.setFont("helvetica", "italic");
+  doc.text("La copia elettronica è conforme all'originale", 20, y);
+  y += 5;
+  const totalPages = doc.getNumberOfPages();
+  doc.text(`La presente cartella si compone di n° ${totalPages} pagine`, 20, y);
 };
