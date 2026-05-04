@@ -88,3 +88,10 @@ export interface EmailLog {
   status: 'success' | 'error';
   details?: string;
 }
+export interface EmailAnalysis {
+  tipoEsame: string[];
+  diagnosi: string;
+  valoriAnomali: string[];
+  notePerMedico: string;
+  dataEsame?: string;
+}
