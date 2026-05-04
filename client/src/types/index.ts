@@ -87,15 +87,4 @@ export interface EmailLog {
   sent_at: string;
   status: 'success' | 'error';
   details?: string;
-export type AppointmentStatus = 'pending' | 'confirmed' | 'rescheduled' | 'cancelled';
-
-export interface Appointment {
-  id: number;
-  worker_id: number;
-  company_id: number;
-  data_proposta: string;
-  stato: AppointmentStatus;
-  note?: string;
-  data_originale?: string;
-  timestamp_modifica: string;
 }
