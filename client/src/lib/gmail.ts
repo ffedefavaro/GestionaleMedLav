@@ -71,6 +71,9 @@ export interface TokenClient {
   requestAccessToken: () => void;
 }
 
+import type { Attachment } from './attachments';
+import type { EmailAnalysis } from '../types';
+
 interface Google {
   accounts: {
     oauth2: {

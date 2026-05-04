@@ -7,8 +7,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 export interface Attachment {
   filename: string;
   mimeType: string;
-  data: Uint8Array;
-  extractedText: string;
+  base64Data?: string;   // raw base64 per Claude API
+  extractedText?: string;
 }
 
 export const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => {
@@ -55,7 +55,8 @@ export const fetchGmailAttachments = async (accessToken: string, messageId: stri
     });
     const attachData = attachRes.result;
 
-    const binaryData = atob(attachData.data.replace(/-/g, '+').replace(/_/g, '/'));
+    const base64Data = attachData.data.replace(/-/g, '+').replace(/_/g, '/');
+    const binaryData = atob(base64Data);
     const bytes = new Uint8Array(binaryData.length);
     for (let i = 0; i < binaryData.length; i++) {
       bytes[i] = binaryData.charCodeAt(i);
@@ -73,7 +74,7 @@ export const fetchGmailAttachments = async (accessToken: string, messageId: stri
     return {
       filename: part.filename!,
       mimeType: part.mimeType,
-      data: bytes,
+      base64Data,
       extractedText
     };
   }));
