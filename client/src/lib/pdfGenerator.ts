@@ -87,6 +87,16 @@ export interface Visit {
   prescrizioni?: string;
   scadenza_prossima?: string;
   accertamenti_effettuati?: string;
+  eo_cardiaca?: string; // <!-- MODIFICA -->
+  eo_respiratoria?: string; // <!-- MODIFICA -->
+  eo_cervicale?: string; // <!-- MODIFICA -->
+  eo_dorsolombare?: string; // <!-- MODIFICA -->
+  eo_spalle?: string; // <!-- MODIFICA -->
+  eo_arti_superiori?: string; // <!-- MODIFICA -->
+  eo_arti_inferiori?: string; // <!-- MODIFICA -->
+  eo_altro?: string; // <!-- MODIFICA -->
+  incidenti_invalidita?: string; // <!-- MODIFICA -->
+  conclusioni?: string; // <!-- MODIFICA -->
 }
 
 export interface DoctorProfile {
@@ -282,6 +292,8 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
   if (mode === 'full' || mode === 'combined') {
     renderPage1(doc);
     renderPage2(doc);
+    renderPage3(doc, visit, addSectionTitle, addField); // <!-- MODIFICA -->
+    renderPage4(doc, visit, company, worker, effectiveDoctor, addSectionTitle, addField); // <!-- MODIFICA -->
   }
 
   if (mode === 'judgment') {
@@ -299,4 +311,88 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
   }
 
   return doc;
+};
+
+/**
+ * Render Page 3: Accident history and Informed Consent
+ * <!-- MODIFICA -->
+ */
+const renderPage3 = (pdf: jsPDF, visit: Partial<Visit>, addSectionTitle: any, addField: any): void => {
+  pdf.addPage();
+  let y = 30;
+  y = addSectionTitle(pdf, "13. INCIDENTI E INVALIDITÀ", y);
+  y = addField(pdf, "Pregressi/Attuali", visit.incidenti_invalidita, y);
+
+  y = addSectionTitle(pdf, "14. CONSENSO INFORMATO", y);
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "normal");
+  const consensoText = "Il sottoscritto lavoratore, acquisite le informazioni di cui all'art. 13 del Regolamento UE 2016/679 e del D.Lgs. 81/08, dichiara di essere stato edotto sui rischi professionali e sulle finalità della sorveglianza sanitaria. È stato informato riguardo la necessità di conservazione della cartella sanitaria e di rischio e all'opportunità di sottoporsi ad accertamenti sanitari anche dopo la cessazione dell'attività lavorativa ai sensi dell'art. 25, comma 1, lett. h) del D.Lgs. 81/2008. Esprime il proprio consenso informato all'esecuzione degli accertamenti previsti dal protocollo sanitario e al trattamento dei dati sensibili per fini di medicina del lavoro.";
+  const lines = pdf.splitTextToSize(consensoText, 170);
+  pdf.text(lines, 20, y);
+  y += (lines.length * 5) + 15;
+
+  pdf.setFont("helvetica", "bold");
+  pdf.text("Data: ____________________", 20, y);
+  pdf.text("Firma del Lavoratore: ____________________________", 110, y);
+};
+
+/**
+ * Render Page 4: Physical exam, results, and judgment
+ * <!-- MODIFICA -->
+ */
+const renderPage4 = (pdf: jsPDF, visit: Partial<Visit>, _company: Company, _worker: Worker, doctor: DoctorProfile, addSectionTitle: any, addField: any): void => {
+  pdf.addPage();
+  let y = 30;
+
+  y = addSectionTitle(pdf, "15. ESAME OBIETTIVO PER APPARATI", y);
+  y = addField(pdf, "App. Cardiovascolare", visit.eo_cardiaca, y);
+  y = addField(pdf, "App. Respiratorio", visit.eo_respiratoria, y);
+  y = addField(pdf, "Rachide Cervicale", visit.eo_cervicale, y);
+  y = addField(pdf, "Rachide Dorsolombare", visit.eo_dorsolombare, y);
+  y = addField(pdf, "Spalle", visit.eo_spalle, y);
+  y = addField(pdf, "Arti Superiori", visit.eo_arti_superiori, y);
+  y = addField(pdf, "Arti Inferiori", visit.eo_arti_inferiori, y);
+  y = addField(pdf, "Altro", visit.eo_altro, y);
+
+  y = addSectionTitle(pdf, "16. ACCERTAMENTI INTEGRATIVI E RISULTATI", y);
+  y = addField(pdf, "Esiti Accertamenti", visit.accertamenti_effettuati, y);
+
+  y = addSectionTitle(pdf, "17. CONCLUSIONI E GIUDIZIO DI IDONEITÀ", y);
+  y = addField(pdf, "Conclusioni", visit.conclusioni, y);
+
+  pdf.setFontSize(10);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("GIUDIZIO DI IDONEITÀ:", 20, y);
+  pdf.setFontSize(11);
+  pdf.text(String(visit.giudizio || "NON ESPRESSO").toUpperCase(), 70, y);
+  y += 8;
+
+  y = addField(pdf, "Prescrizioni", visit.prescrizioni, y);
+  y = addField(pdf, "Data Prossima Visita", visit.scadenza_prossima, y);
+
+  const today = new Date().toLocaleDateString('it-IT');
+  y = addField(pdf, "Trasmissione Giudizio", `Data: ${today} (Consegnato al lavoratore e trasmesso al d.l.)`, y);
+
+  y += 10;
+  if (doctor.timbro_immagine) {
+    try {
+        const imgData = doctor.timbro_immagine.startsWith('data:') ? doctor.timbro_immagine : `data:image/png;base64,${doctor.timbro_immagine}`;
+        pdf.addImage(imgData, 'PNG', 140, y, 35, 15);
+    } catch(e) {}
+  }
+  y += 18;
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(`Dott. ${doctor.nome || ''}`, 130, y);
+  pdf.setFontSize(8);
+  pdf.setFont("helvetica", "normal");
+  pdf.text("Firma e Timbro del Medico Competente", 130, y + 4);
+
+  y += 15;
+  pdf.setFontSize(8);
+  pdf.setFont("helvetica", "italic");
+  pdf.text("Dichiarazione di conformità: Il presente documento è conforme all'originale archiviato.", 20, y);
+
+  const totalPages = pdf.getNumberOfPages();
+  pdf.text(`Documento composto da n. ${totalPages} pagine e n. 0 allegati.`, 20, y + 5);
 };

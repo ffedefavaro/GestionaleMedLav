@@ -107,6 +107,8 @@ interface VisitForm {
   eo_arti_superiori: string;
   eo_arti_inferiori: string;
   eo_altro: string;
+  incidenti_invalidita: string; // <!-- MODIFICA -->
+  conclusioni: string; // <!-- MODIFICA -->
 }
 
 const FamilyMemberCard = ({
@@ -236,7 +238,9 @@ const NuovaVisita = () => {
     eo_spalle: '',
     eo_arti_superiori: '',
     eo_arti_inferiori: '',
-    eo_altro: ''
+    eo_altro: '',
+    incidenti_invalidita: '', // <!-- MODIFICA -->
+    conclusioni: '' // <!-- MODIFICA -->
   });
 
   useEffect(() => {
@@ -453,7 +457,17 @@ const NuovaVisita = () => {
       giudizio: visitForm.giudizio,
       prescrizioni: visitForm.prescrizioni,
       scadenza_prossima: visitForm.scadenza_prossima,
-      accertamenti_effettuati: visitForm.accertamenti_effettuati
+      accertamenti_effettuati: visitForm.accertamenti_effettuati,
+      eo_cardiaca: visitForm.eo_cardiaca, // <!-- MODIFICA -->
+      eo_respiratoria: visitForm.eo_respiratoria, // <!-- MODIFICA -->
+      eo_cervicale: visitForm.eo_cervicale, // <!-- MODIFICA -->
+      eo_dorsolombare: visitForm.eo_dorsolombare, // <!-- MODIFICA -->
+      eo_spalle: visitForm.eo_spalle, // <!-- MODIFICA -->
+      eo_arti_superiori: visitForm.eo_arti_superiori, // <!-- MODIFICA -->
+      eo_arti_inferiori: visitForm.eo_arti_inferiori, // <!-- MODIFICA -->
+      eo_altro: visitForm.eo_altro, // <!-- MODIFICA -->
+      incidenti_invalidita: visitForm.incidenti_invalidita, // <!-- MODIFICA -->
+      conclusioni: visitForm.conclusioni // <!-- MODIFICA -->
     };
 
     const doc = generateCompletePDF({
@@ -764,6 +778,15 @@ const NuovaVisita = () => {
                       onChange={e => setVisitForm({...visitForm, anamnesi_patologica_prossima: e.target.value})}
                     />
                   </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Incidenti e Invalidità {/* MODIFICA */}</label>
+                    <textarea
+                      className="input-standard h-24 text-xs"
+                      placeholder="Eventuali incidenti o invalidità..."
+                      value={visitForm.incidenti_invalidita}
+                      onChange={e => setVisitForm({...visitForm, incidenti_invalidita: e.target.value})}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
@@ -1057,6 +1080,10 @@ const NuovaVisita = () => {
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prossima Visita</label>
                 <input type="date" className="input-standard font-black text-primary" value={visitForm.scadenza_prossima} onChange={e => setVisitForm({...visitForm, scadenza_prossima: e.target.value})} />
+              </div>
+              <div className="col-span-full flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Conclusioni {/* MODIFICA */}</label>
+                <textarea className="input-standard h-20" value={visitForm.conclusioni} onChange={e => setVisitForm({...visitForm, conclusioni: e.target.value})} />
               </div>
               <div className="col-span-full flex flex-col gap-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prescrizioni / Note</label>
