@@ -1,4 +1,4 @@
-name: Deploy to Netlify
+name: Deploy to Cloudflare Pages
 
 on:
   push:
@@ -22,25 +22,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'client/package-lock.json'
 
-      - name: Install dependencies
-        run: npm install
-        working-directory: client
-
       - name: Build project
-        run: npm run build
-        working-directory: client
+        run: cd client && npm install && npm run build
 
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v3.0
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
         with:
-          publish-dir: './client/dist'
-          production-branch: main
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy from GitHub Actions"
-          enable-pull-request-comment: true
-          enable-commit-comment: true
-          overwritable-pull-request-deploy-site-preview: true
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        timeout-minutes: 5
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: gestionalemedlav
+          directory: client/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
