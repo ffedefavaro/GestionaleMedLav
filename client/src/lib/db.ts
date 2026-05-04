@@ -104,7 +104,8 @@ const createTables = (database: Database) => {
       sede_operativa TEXT,
       referente TEXT,
       rspp TEXT,
-      rls TEXT
+      rls TEXT,
+      email TEXT
     );
 
     CREATE TABLE IF NOT EXISTS workers (
@@ -163,12 +164,28 @@ const createTables = (database: Database) => {
       anamnesi_lavorativa TEXT,
       anamnesi_familiare TEXT,
       anamnesi_patologica TEXT,
+      anamnesi_patologica_remota TEXT,
+      anamnesi_patologica_prossima TEXT,
+      anamnesi_fisiologica TEXT,
+      allergie TEXT,
+      vaccinazioni TEXT,
       esame_obiettivo TEXT,
       giudizio TEXT,
       prescrizioni TEXT,
       scadenza_prossima DATE,
       medico_id INTEGER,
       finalized INTEGER DEFAULT 0,
+      accertamenti_effettuati TEXT,
+      eo_cardiaca TEXT,
+      eo_respiratoria TEXT,
+      eo_cervicale TEXT,
+      eo_dorsolombare TEXT,
+      eo_spalle TEXT,
+      eo_arti_superiori TEXT,
+      eo_arti_inferiori TEXT,
+      eo_altro TEXT,
+      incidenti_invalidita TEXT,
+      conclusioni TEXT,
       FOREIGN KEY (worker_id) REFERENCES workers(id)
     );
 
@@ -180,6 +197,7 @@ const createTables = (database: Database) => {
       pressione_diastolica INTEGER,
       frequenza_cardiaca INTEGER,
       bmi REAL,
+      spo2 INTEGER,
       FOREIGN KEY (visit_id) REFERENCES visits(id)
     );
 
@@ -290,7 +308,10 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN anamnesi_patologica_prossima TEXT;",
     "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;",
     "ALTER TABLE visits ADD COLUMN allergie TEXT;",
-    "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;"
+    "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;",
+    "ALTER TABLE visits ADD COLUMN incidenti_invalidita TEXT;",
+    "ALTER TABLE visits ADD COLUMN conclusioni TEXT;",
+    "ALTER TABLE companies ADD COLUMN email TEXT;"
   ];
 
   migrations.forEach(m => {

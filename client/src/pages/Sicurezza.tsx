@@ -119,7 +119,7 @@ const Sicurezza = () => {
                 </tr>
               </thead>
               <tbody>
-                {training.map(t => (
+                {training.map((t: any) => (
                   <tr key={t.id} className="group">
                     <td className="font-black text-primary">{t.cognome}</td>
                     <td>
@@ -187,7 +187,7 @@ const Sicurezza = () => {
                 </tr>
               </thead>
               <tbody>
-                {ppe.map(p => (
+                {ppe.map((p: any) => (
                   <tr key={p.id}>
                     <td className="font-black text-primary">{p.cognome}</td>
                     <td>

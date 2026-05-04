@@ -9,6 +9,7 @@ export interface Company {
   referente?: string;
   rspp?: string;
   rls?: string;
+  email?: string;
 }
 
 export interface Worker {
@@ -50,13 +51,29 @@ export interface Visit {
   tipo_visita: string;
   anamnesi_lavorativa?: string;
   anamnesi_familiare?: string;
-  anamnesi_patologica?: string;
-  esame_obiettivo?: string;
+  anamnesi_patologica?: string; // Legacy
+  anamnesi_patologica_remota?: string;
+  anamnesi_patologica_prossima?: string;
+  anamnesi_fisiologica?: string;
+  allergie?: string;
+  vaccinazioni?: string;
+  esame_obiettivo?: string; // Legacy
   giudizio?: string;
   prescrizioni?: string;
   scadenza_prossima?: string;
   medico_id?: number;
   finalized: number;
+  accertamenti_effettuati?: string;
+  eo_cardiaca?: string;
+  eo_respiratoria?: string;
+  eo_cervicale?: string;
+  eo_dorsolombare?: string;
+  eo_spalle?: string;
+  eo_arti_superiori?: string;
+  eo_arti_inferiori?: string;
+  eo_altro?: string;
+  incidenti_invalidita?: string;
+  conclusioni?: string;
 }
 
 export interface AuditLog {
@@ -88,6 +105,7 @@ export interface EmailLog {
   status: 'success' | 'error';
   details?: string;
 }
+
 export interface EmailAnalysis {
   tipoEsame: string[];
   diagnosi: string;

@@ -24,6 +24,7 @@ vi.mock('jspdf', () => ({
       getNumberOfPages: vi.fn().mockReturnValue(2),
       setPage: vi.fn(),
       splitTextToSize: vi.fn().mockReturnValue(['test']),
+      addImage: vi.fn(),
     };
   }),
 }));
@@ -37,6 +38,8 @@ vi.mock('pdfjs-dist', () => ({
 
 vi.mock('../lib/gmail', () => ({
   fetchGmailMessages: vi.fn(),
+  initGapiClient: vi.fn(),
+  analyzeEmailWithAI: vi.fn(),
 }));
 
 vi.mock('../lib/attachments', () => ({
@@ -51,7 +54,8 @@ describe('NuovaVisita Integration', () => {
     mansione: 'Operaio',
     email: 'mario.rossi@example.com',
     codice_fiscale: 'RSSMRA80A01H501U',
-    azienda: 'Test Azienda'
+    azienda: 'Test Azienda',
+    rischi: '[]'
   };
 
   beforeEach(() => {
@@ -64,6 +68,9 @@ describe('NuovaVisita Integration', () => {
       }
       if (sql.includes('FROM doctor_profile')) {
         return [{ nome: 'Dott. Test', specializzazione: 'Medicina del Lavoro', n_iscrizione: '12345' }];
+      }
+      if (sql.includes('FROM companies')) {
+          return [{ ragione_sociale: 'Test Azienda', sede_legale: 'Via Test 1' }];
       }
       if (sql.includes('SELECT id FROM visits')) {
         return [{ id: 101 }]; // Return a mock visit ID
@@ -88,8 +95,9 @@ describe('NuovaVisita Integration', () => {
     fireEvent.click(iniziaBtn);
 
     // Step 2: Anamnesi
-    const textareas = screen.getAllByRole('textbox');
-    fireEvent.change(textareas[0], { target: { value: 'Nessun rischio particolare' } });
+    // Check that structured sections are present
+    expect(screen.getByText(/Anamnesi Familiare/i)).toBeInTheDocument();
+    expect(screen.getByText(/Anamnesi Fisiologica/i)).toBeInTheDocument();
 
     const prossimoBtn1 = screen.getByRole('button', { name: /Prossimo Step/i });
     fireEvent.click(prossimoBtn1);
@@ -98,7 +106,7 @@ describe('NuovaVisita Integration', () => {
     expect(screen.getByText(/Parametri e Esame Obiettivo/i)).toBeInTheDocument();
 
     const spinbuttons = screen.getAllByRole('spinbutton');
-    fireEvent.change(spinbuttons[3], { target: { value: '80' } });
+    fireEvent.change(spinbuttons[3], { target: { value: '80' } }); // Peso
 
     const vaiGiudizioBtn = screen.getByRole('button', { name: /Vai al Giudizio/i });
     fireEvent.click(vaiGiudizioBtn);

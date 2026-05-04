@@ -192,7 +192,7 @@ const Scadenziario = () => {
                  onChange={e => setSelectedTipo(e.target.value)}
                >
                  <option value="">Tutti i Tipi Visita</option>
-                 {tipiVisita.map(t => <option key={t} value={t}>{t}</option>)}
+                 {tipiVisita.map((t: string) => <option key={t} value={t}>{t}</option>)}
                </select>
             </div>
           </div>

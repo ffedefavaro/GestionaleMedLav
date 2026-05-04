@@ -39,36 +39,77 @@ export interface Worker {
 
 export interface FamilyMemberHistory {
   deceduto: boolean;
+  eta_decesso?: number;
+  causa?: string;
   patologie: string[];
+  altro_note?: string;
 }
 
 export interface FamilyHistory {
   padre: FamilyMemberHistory;
   madre: FamilyMemberHistory;
   fratelli_sorelle: FamilyMemberHistory;
-  nonni: FamilyMemberHistory;
+  nonno_paterno: FamilyMemberHistory;
+  nonna_paterna: FamilyMemberHistory;
+  nonno_materno: FamilyMemberHistory;
+  nonna_materna: FamilyMemberHistory;
 }
 
 export interface PhysiologicalHistory {
-  fumo: string;
-  alcol: string;
-  farmaci_abituali: string;
-  servizio_leva: string;
-  attivita_fisica?: string;
-  dieta?: string;
-  sonno?: string;
+  sviluppo: {
+    gravidanza_parto: 'Regolari' | 'Complicazioni';
+    gravidanza_note?: string;
+    psicomotorio: 'Regolare' | 'Rallentato';
+    psicomotorio_note?: string;
+  };
+  puberta: {
+    sviluppo_puberale: 'Regolare' | 'Anticipato' | 'Ritardato';
+    menarca_eta?: number;
+    ciclo?: 'Regolare' | 'Irregolare' | 'Amenorrea';
+    gravidanze_n?: number;
+    parti_n?: number;
+    aborti_n?: number;
+    menopausa: boolean;
+    menopausa_eta?: number;
+  };
+  abitudini: {
+    fumo: 'Non fumatore' | 'Ex fumatore' | 'Fumatore';
+    fumo_sigarette_die?: number;
+    fumo_anni?: number;
+    fumo_anno_cessazione?: number;
+    alcol: 'No' | 'Occasionale' | 'Quotidiano';
+    alcol_unita_die?: number;
+    attivita_fisica: 'Sedentario' | 'Leggera' | 'Moderata' | 'Intensa';
+    dieta: 'Onnivora' | 'Vegetariana' | 'Vegana' | 'Altro';
+    dieta_altro?: string;
+    farmaci_abituali?: string;
+    nessuna_allergia: boolean;
+    allergie_note?: string;
+  };
+  sonno: {
+    qualita: 'Buona' | 'Disturbi occasionali' | 'Insonnia';
+  };
 }
 
 export interface WorkExperience {
   azienda: string;
+  ateco?: string;
   mansione: string;
   dal: string;
   al: string;
   esposizioni: string[];
+  note?: string;
 }
 
 export interface WorkHistory {
   esperienze: WorkExperience[];
+  infortuni: 'Nessuno' | 'Sì';
+  infortuni_n?: number;
+  infortuni_ultimo_anno?: number;
+  infortuni_tipo?: string;
+  malattie_professionali: 'No' | 'Sì';
+  malattie_professionali_quale?: string;
+  malattie_professionali_anno?: number;
 }
 
 export interface Visit {
@@ -83,20 +124,32 @@ export interface Visit {
   anamnesi_fisiologica?: string;
   allergie?: string;
   vaccinazioni?: string;
+  altezza?: number;
+  peso?: number;
+  bmi?: number;
+  p_sistolica?: number;
+  p_diastolica?: number;
+  frequenza?: number;
+  spo2?: number;
+  eo_cardiaca?: string;
+  eo_respiratoria?: string;
+  eo_cervicale?: string;
+  eo_dorsolombare?: string;
+  eo_spalle?: string;
+  eo_arti_superiori?: string;
+  eo_arti_inferiori?: string;
+  eo_altro?: string;
+  incidenti_invalidita?: string;
+  conclusioni?: string;
   giudizio?: string;
   prescrizioni?: string;
   scadenza_prossima?: string;
   accertamenti_effettuati?: string;
-  eo_cardiaca?: string; // <!-- MODIFICA -->
-  eo_respiratoria?: string; // <!-- MODIFICA -->
-  eo_cervicale?: string; // <!-- MODIFICA -->
-  eo_dorsolombare?: string; // <!-- MODIFICA -->
-  eo_spalle?: string; // <!-- MODIFICA -->
-  eo_arti_superiori?: string; // <!-- MODIFICA -->
-  eo_arti_inferiori?: string; // <!-- MODIFICA -->
-  eo_altro?: string; // <!-- MODIFICA -->
-  incidenti_invalidita?: string; // <!-- MODIFICA -->
-  conclusioni?: string; // <!-- MODIFICA -->
+  trasmissione_lavoratore_data?: string;
+  trasmissione_lavoratore_metodo?: string;
+  trasmissione_datore_data?: string;
+  trasmissione_datore_metodo?: string;
+  eo_note?: string;
 }
 
 export interface DoctorProfile {
@@ -113,15 +166,16 @@ export interface PDFParams {
   worker: Worker;
   company: Company;
   doctor: DoctorProfile;
-  // Optional legacy fields for compatibility
-  workHistory?: any;
-  familyHistory?: any;
-  physioHistory?: any;
+  workHistory?: WorkHistory;
+  familyHistory?: FamilyHistory;
+  physioHistory?: PhysiologicalHistory;
   risks?: string[];
 }
 
+type PDFValue = string | number | boolean | undefined | null;
+
 export const generateCompletePDF = (params: PDFParams): jsPDF => {
-  const { mode, visit, worker, company, doctor } = params;
+  const { mode, visit, worker, company, doctor, workHistory, familyHistory, physioHistory, risks } = params;
 
   // Header medico da doctor_profile if empty
   let effectiveDoctor = { ...doctor };
@@ -142,13 +196,19 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
       }
     }
   }
-  if (!effectiveMansione || String(effectiveMansione).toLowerCase() === "null") effectiveMansione = "Nulla da segnalare";
+  if (!effectiveMansione || String(effectiveMansione).toLowerCase() === "null") effectiveMansione = "Mansione non definita";
 
-  const formatValue = (val: any): string => {
-    if (val === null || val === undefined || String(val).trim() === "" || String(val).toLowerCase() === "null") {
-      return "Nulla da segnalare";
+  const calculateAge = (dob: string): string => {
+    if (!dob) return "N/D";
+    const birthDate = new Date(dob);
+    if (isNaN(birthDate.getTime())) return "N/D";
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
     }
-    return String(val);
+    return age > 0 ? String(age) : "N/D";
   };
 
   const doc = new jsPDF();
@@ -185,7 +245,16 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     return y + 12;
   };
 
-  const addField = (pdf: jsPDF, label: string, value: any, y: number): number => {
+  const formatValue = (val: PDFValue): string => {
+    if (val === null || val === undefined || String(val).trim() === "" || String(val).toLowerCase() === "null") {
+      return "Nulla da segnalare";
+    }
+    if (val === true) return "Sì / Presente / Nella norma";
+    if (val === false) return "No / Assente / Non rilevato";
+    return String(val);
+  };
+
+  const addField = (pdf: jsPDF, label: string, value: PDFValue, y: number): number => {
     pdf.setFontSize(9);
     pdf.setFont("helvetica", "bold");
     pdf.text(`${label}:`, 20, y);
@@ -200,8 +269,10 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     pdf.setFontSize(14);
     pdf.setFont("helvetica", "bold");
     pdf.text("CARTELLA SANITARIA E DI RISCHIO", 105, 32, { align: 'center' });
+    pdf.setFontSize(10);
+    pdf.text("(Art. 41 D.Lgs. 81/08 e s.m.i. - Allegato 3A)", 105, 38, { align: 'center' });
 
-    currentY = 40;
+    currentY = 45;
     currentY = addSectionTitle(pdf, "1. DATI VISITA", currentY);
     currentY = addField(pdf, "Data Visita", visit.data_visita, currentY);
     currentY = addField(pdf, "Tipo Visita", visit.tipo_visita?.toUpperCase(), currentY);
@@ -214,7 +285,8 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     currentY = addSectionTitle(pdf, "3. ANAGRAFICA LAVORATORE", currentY);
     currentY = addField(pdf, "Nominativo", `${worker.cognome} ${worker.nome}`, currentY);
     currentY = addField(pdf, "Codice Fiscale", worker.codice_fiscale, currentY);
-    currentY = addField(pdf, "Data di Nascita", worker.data_nascita, currentY);
+    currentY = addField(pdf, "Data e Luogo Nascita", `${worker.data_nascita} (${worker.luogo_nascita || 'N/D'})`, currentY);
+    currentY = addField(pdf, "Età", calculateAge(worker.data_nascita), currentY);
     currentY = addField(pdf, "Sesso", worker.sesso, currentY);
 
     currentY = addSectionTitle(pdf, "4. DATI OCCUPAZIONALI", currentY);
@@ -222,15 +294,16 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     currentY = addField(pdf, "Data Assunzione", worker.data_assunzione, currentY);
 
     currentY = addSectionTitle(pdf, "5. PROTOCOLLO SANITARIO", currentY);
-    // Risks from worker or protocol
-    let risks = "Nulla da segnalare";
-    if (worker.rischi) {
+    let riskText = "Nulla da segnalare";
+    if (risks && risks.length > 0) {
+      riskText = risks.join(", ");
+    } else if (worker.rischi) {
       try {
         const rArr = JSON.parse(worker.rischi);
-        if (Array.isArray(rArr) && rArr.length > 0) risks = rArr.join(", ");
+        if (Array.isArray(rArr) && rArr.length > 0) riskText = rArr.join(", ");
       } catch(e) {}
     }
-    currentY = addField(pdf, "Fattori di Rischio", risks, currentY);
+    currentY = addField(pdf, "Fattori di Rischio", riskText, currentY);
 
     let accertamenti = visit.accertamenti_effettuati || "Come da protocollo";
     currentY = addField(pdf, "Accertamenti", accertamenti, currentY);
@@ -241,26 +314,37 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     currentY = 30;
 
     currentY = addSectionTitle(pdf, "6. ANAMNESI LAVORATIVA", currentY);
-    currentY = addField(pdf, "Esperienze Pregresse", visit.anamnesi_lavorativa, currentY);
+    if (workHistory && workHistory.esperienze && workHistory.esperienze.length > 0) {
+        workHistory.esperienze.forEach((exp, i) => {
+          currentY = addField(pdf, `Esperienza ${i+1}`, `${exp.azienda} (${exp.dal}-${exp.al}) - ${exp.mansione} [Rischi: ${exp.esposizioni.join(", ")}]`, currentY);
+        });
+        currentY = addField(pdf, "Infortuni", workHistory.infortuni === 'Sì' ? `${workHistory.infortuni_n} eventi (ultimo ${workHistory.infortuni_ultimo_anno})` : "Nessuno", currentY);
+    } else {
+        currentY = addField(pdf, "Esperienze Pregresse", visit.anamnesi_lavorativa, currentY);
+    }
 
     currentY = addSectionTitle(pdf, "7. ANAMNESI FAMILIARE", currentY);
-    currentY = addField(pdf, "Storia Familiare", visit.anamnesi_familiare, currentY);
+    if (familyHistory) {
+        Object.entries(familyHistory).forEach(([member, data]) => {
+            const label = member.replace('_', ' ').charAt(0).toUpperCase() + member.replace('_', ' ').slice(1);
+            const content = data.patologie.length > 0 || data.deceduto
+              ? `${data.deceduto ? 'Deceduto' : 'Vivente'}. Patologie: ${data.patologie.join(", ") || 'Nessuna'} ${data.altro_note ? '(' + data.altro_note + ')' : ''}`
+              : "Nulla da segnalare";
+            currentY = addField(pdf, label, content, currentY);
+        });
+    } else {
+        currentY = addField(pdf, "Storia Familiare", visit.anamnesi_familiare, currentY);
+    }
 
     currentY = addSectionTitle(pdf, "8. ANAMNESI FISIOLOGICA", currentY);
-    // Parse JSON if possible, else raw
-    let fisio = visit.anamnesi_fisiologica || "";
-    if (fisio.startsWith("{")) {
-       try {
-         const obj = JSON.parse(fisio);
-         currentY = addField(pdf, "Fumo", obj.fumo, currentY);
-         currentY = addField(pdf, "Alcol", obj.alcol, currentY);
-         currentY = addField(pdf, "Farmaci Abituali", obj.farmaci_abituali, currentY);
-         currentY = addField(pdf, "Servizio di Leva", obj.servizio_leva, currentY);
-       } catch(e) {
-         currentY = addField(pdf, "Dati Fisiologici", fisio, currentY);
-       }
+    if (physioHistory) {
+        currentY = addField(pdf, "Sviluppo", `Gravidanza: ${physioHistory.sviluppo.gravidanza_parto}. Psicomotorio: ${physioHistory.sviluppo.psicomotorio}`, currentY);
+        currentY = addField(pdf, "Fumo", physioHistory.abitudini.fumo === 'Fumatore' ? `Sì (${physioHistory.abitudini.fumo_sigarette_die} sig/die)` : physioHistory.abitudini.fumo, currentY);
+        currentY = addField(pdf, "Alcol", physioHistory.abitudini.alcol, currentY);
+        currentY = addField(pdf, "Attività Fisica", physioHistory.abitudini.attivita_fisica, currentY);
+        currentY = addField(pdf, "Allergie", physioHistory.abitudini.nessuna_allergia ? "Nessuna nota" : physioHistory.abitudini.allergie_note, currentY);
     } else {
-       currentY = addField(pdf, "Dati Fisiologici", fisio, currentY);
+        currentY = addField(pdf, "Dati Fisiologici", visit.anamnesi_fisiologica, currentY);
     }
 
     currentY = addSectionTitle(pdf, "9. ANAMNESI PATOLOGICA REMOTA", currentY);
@@ -269,31 +353,59 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     currentY = addSectionTitle(pdf, "10. ANAMNESI PATOLOGICA PROSSIMA", currentY);
     currentY = addField(pdf, "Situazione Clinica Attuale", visit.anamnesi_patologica_prossima, currentY);
 
-    currentY = addSectionTitle(pdf, "11. ALLERGIE", currentY);
+    currentY = addSectionTitle(pdf, "11. ALLERGIE E VACCINAZIONI", currentY);
     currentY = addField(pdf, "Reazioni Allergiche", visit.allergie, currentY);
-
-    currentY = addSectionTitle(pdf, "12. VACCINAZIONI", currentY);
     currentY = addField(pdf, "Stato Vaccinale", visit.vaccinazioni, currentY);
   };
 
   const renderJudgmentOnly = (pdf: jsPDF): void => {
     pdf.setFontSize(16);
     pdf.setFont("helvetica", "bold");
-    pdf.text("GIUDIZIO DI IDONEITÀ", 105, 40, { align: 'center' });
+    pdf.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 35, { align: 'center' });
+    pdf.setFontSize(10);
+    pdf.text("(Art. 41 D.Lgs. 81/08)", 105, 42, { align: 'center' });
 
-    currentY = 60;
-    currentY = addField(pdf, "Lavoratore", `${worker.cognome} ${worker.nome}`, currentY);
-    currentY = addField(pdf, "Azienda", company.ragione_sociale, currentY);
-    currentY = addField(pdf, "Giudizio", visit.giudizio?.toUpperCase(), currentY);
-    currentY = addField(pdf, "Prescrizioni", visit.prescrizioni, currentY);
-    currentY = addField(pdf, "Prossima Scadenza", visit.scadenza_prossima, currentY);
+    currentY = 55;
+    pdf.rect(15, currentY, 180, 50);
+    pdf.setFontSize(10);
+    pdf.text(`Lavoratore: ${worker.cognome} ${worker.nome}`, 20, currentY + 10);
+    pdf.text(`Codice Fiscale: ${worker.codice_fiscale}`, 20, currentY + 18);
+    pdf.text(`Azienda: ${company.ragione_sociale}`, 20, currentY + 26);
+    pdf.text(`Mansione: ${effectiveMansione}`, 20, currentY + 34);
+    pdf.text(`Data Visita: ${visit.data_visita}`, 20, currentY + 42);
+
+    currentY += 65;
+    pdf.setFontSize(12);
+    pdf.text("ESITO DELLA SORVEGLIANZA SANITARIA:", 15, currentY);
+    currentY += 10;
+    pdf.setFontSize(18);
+    pdf.text(visit.giudizio?.toUpperCase() || "IDONEO", 105, currentY + 5, { align: 'center' });
+
+    currentY += 25;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("PRESCRIZIONI / LIMITAZIONI / SUGGERIMENTI:", 15, currentY);
+    pdf.setFont("helvetica", "normal");
+    const presc = pdf.splitTextToSize(visit.prescrizioni || "Nessuna", 175);
+    pdf.text(presc, 15, currentY + 8);
+
+    currentY += 40;
+    pdf.text(`Data prossima visita entro il: ${visit.scadenza_prossima}`, 15, currentY);
+
+    currentY += 30;
+    pdf.text("Firma del Lavoratore", 20, currentY + 10);
+    pdf.line(20, currentY + 5, 80, currentY + 5);
+
+    const drSignatureName = effectiveDoctor.nome || "____________________";
+    pdf.text(`Firma Medico Competente (Dott. ${drSignatureName})`, 130, currentY + 10);
+    pdf.line(130, currentY + 5, 190, currentY + 5);
   };
 
   if (mode === 'full' || mode === 'combined') {
     renderPage1(doc);
     renderPage2(doc);
-    renderPage3(doc, visit, addSectionTitle, addField); // <!-- MODIFICA -->
-    renderPage4(doc, visit, company, worker, effectiveDoctor, addSectionTitle, addField); // <!-- MODIFICA -->
+    renderPage3(doc, visit, addSectionTitle, addField);
+    renderPage4(doc, visit, company, worker, effectiveDoctor, addSectionTitle, addField);
   }
 
   if (mode === 'judgment') {
@@ -315,15 +427,14 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
 
 /**
  * Render Page 3: Accident history and Informed Consent
- * <!-- MODIFICA -->
  */
 const renderPage3 = (pdf: jsPDF, visit: Partial<Visit>, addSectionTitle: any, addField: any): void => {
   pdf.addPage();
   let y = 30;
-  y = addSectionTitle(pdf, "13. INCIDENTI E INVALIDITÀ", y);
+  y = addSectionTitle(pdf, "12. INCIDENTI E INVALIDITÀ", y);
   y = addField(pdf, "Pregressi/Attuali", visit.incidenti_invalidita, y);
 
-  y = addSectionTitle(pdf, "14. CONSENSO INFORMATO", y);
+  y = addSectionTitle(pdf, "13. CONSENSO INFORMATO", y);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
   const consensoText = "Il sottoscritto lavoratore, acquisite le informazioni di cui all'art. 13 del Regolamento UE 2016/679 e del D.Lgs. 81/08, dichiara di essere stato edotto sui rischi professionali e sulle finalità della sorveglianza sanitaria. È stato informato riguardo la necessità di conservazione della cartella sanitaria e di rischio e all'opportunità di sottoporsi ad accertamenti sanitari anche dopo la cessazione dell'attività lavorativa ai sensi dell'art. 25, comma 1, lett. h) del D.Lgs. 81/2008. Esprime il proprio consenso informato all'esecuzione degli accertamenti previsti dal protocollo sanitario e al trattamento dei dati sensibili per fini di medicina del lavoro.";
@@ -338,13 +449,14 @@ const renderPage3 = (pdf: jsPDF, visit: Partial<Visit>, addSectionTitle: any, ad
 
 /**
  * Render Page 4: Physical exam, results, and judgment
- * <!-- MODIFICA -->
  */
 const renderPage4 = (pdf: jsPDF, visit: Partial<Visit>, _company: Company, _worker: Worker, doctor: DoctorProfile, addSectionTitle: any, addField: any): void => {
   pdf.addPage();
   let y = 30;
 
-  y = addSectionTitle(pdf, "15. ESAME OBIETTIVO PER APPARATI", y);
+  y = addSectionTitle(pdf, "14. ESAME OBIETTIVO PER APPARATI", y);
+  const vitalParams = `H: ${visit.altezza}cm | P: ${visit.peso}kg | BMI: ${visit.bmi} | PA: ${visit.p_sistolica}/${visit.p_diastolica} mmHg | FC: ${visit.frequenza} bpm | SpO2: ${visit.spo2}%`;
+  y = addField(pdf, "Parametri Vitali", vitalParams, y);
   y = addField(pdf, "App. Cardiovascolare", visit.eo_cardiaca, y);
   y = addField(pdf, "App. Respiratorio", visit.eo_respiratoria, y);
   y = addField(pdf, "Rachide Cervicale", visit.eo_cervicale, y);
@@ -354,10 +466,10 @@ const renderPage4 = (pdf: jsPDF, visit: Partial<Visit>, _company: Company, _work
   y = addField(pdf, "Arti Inferiori", visit.eo_arti_inferiori, y);
   y = addField(pdf, "Altro", visit.eo_altro, y);
 
-  y = addSectionTitle(pdf, "16. ACCERTAMENTI INTEGRATIVI E RISULTATI", y);
+  y = addSectionTitle(pdf, "15. ACCERTAMENTI INTEGRATIVI E RISULTATI", y);
   y = addField(pdf, "Esiti Accertamenti", visit.accertamenti_effettuati, y);
 
-  y = addSectionTitle(pdf, "17. CONCLUSIONI E GIUDIZIO DI IDONEITÀ", y);
+  y = addSectionTitle(pdf, "16. CONCLUSIONI E GIUDIZIO DI IDONEITÀ", y);
   y = addField(pdf, "Conclusioni", visit.conclusioni, y);
 
   pdf.setFontSize(10);
