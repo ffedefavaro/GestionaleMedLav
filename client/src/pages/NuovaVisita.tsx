@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase, ShieldCheck } from 'lucide-react';
+import { generateCompletePDF, type Visit as PDFVisit, type Worker as PDFWorker, type Company as PDFCompany, type DoctorProfile as PDFDoctor } from '../lib/pdfGenerator';
 import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 import { get } from 'idb-keyval';
@@ -84,7 +84,11 @@ interface VisitForm {
   tipo_visita: string;
   anamnesi_lavorativa: WorkExperience[];
   anamnesi_familiare: FamilyMember[];
-  anamnesi_patologica: PhysiologicalHistory;
+  anamnesi_patologica: PhysiologicalHistory; // Legacy field for internal state
+  anamnesi_patologica_remota: string;
+  anamnesi_patologica_prossima: string;
+  servizio_leva: string;
+  vaccinazioni: string;
   giudizio: string;
   prescrizioni: string;
   accertamenti_effettuati: string;
@@ -209,6 +213,10 @@ const NuovaVisita = () => {
       allergie: { nessuna: true, dettaglio: '' },
       note_extra: ''
     },
+    anamnesi_patologica_remota: '',
+    anamnesi_patologica_prossima: '',
+    servizio_leva: 'Non svolto',
+    vaccinazioni: '',
     giudizio: 'idoneo',
     prescrizioni: '',
     accertamenti_effettuati: '',
@@ -337,19 +345,33 @@ const NuovaVisita = () => {
   const handleSave = async () => {
     if (!selectedWorkerId || !workerData) return;
 
+    const fisioJSON = JSON.stringify({
+      fumo: visitForm.anamnesi_patologica.fumo + (visitForm.anamnesi_patologica.fumo === 'Fumatore' ? ` (${visitForm.anamnesi_patologica.sigarette_die} sig/die)` : ''),
+      alcol: visitForm.anamnesi_patologica.alcol,
+      farmaci_abituali: visitForm.anamnesi_patologica.farmaci_abituali,
+      servizio_leva: visitForm.servizio_leva,
+      note_extra: visitForm.anamnesi_patologica.note_extra
+    });
+
     // 1. Insert Visit with structured exam fields
     await runCommand(`
       INSERT INTO visits (
         worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica,
+        anamnesi_patologica_remota, anamnesi_patologica_prossima, anamnesi_fisiologica, allergie, vaccinazioni,
         accertamenti_effettuati, eo_cardiaca, eo_respiratoria, eo_cervicale, eo_dorsolombare,
         eo_spalle, eo_arti_superiori, eo_arti_inferiori, eo_altro, giudizio, prescrizioni, scadenza_prossima, finalized
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `, [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
       JSON.stringify(visitForm.anamnesi_lavorativa),
       JSON.stringify(visitForm.anamnesi_familiare),
-      JSON.stringify(visitForm.anamnesi_patologica),
+      JSON.stringify(visitForm.anamnesi_patologica), // Keep for legacy if needed, or use as catch-all
+      visitForm.anamnesi_patologica_remota,
+      visitForm.anamnesi_patologica_prossima,
+      fisioJSON,
+      visitForm.anamnesi_patologica.allergie.nessuna ? 'Nessuna' : visitForm.anamnesi_patologica.allergie.dettaglio,
+      visitForm.vaccinazioni,
       visitForm.accertamenti_effettuati, visitForm.eo_cardiaca, visitForm.eo_respiratoria,
       visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle,
       visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori, visitForm.eo_altro,
@@ -393,154 +415,56 @@ const NuovaVisita = () => {
   };
 
   const generatePDF = () => {
-    // Fix instruction 2: guard
     if (!workerData) return;
 
     const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
-    const doctorData = (doctorDataResults[0] || {}) as { nome?: string; specializzazione?: string; n_iscrizione?: string };
-    const doc = new jsPDF();
+    const doctorData = (doctorDataResults[0] || { nome: '', specializzazione: '', n_iscrizione: '' }) as PDFDoctor;
 
-    // GIUDIZIO DI IDONEITÀ
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text("(D.Lgs. 81/08 e s.m.i. - Art. 41)", 105, 26, { align: 'center' });
+    const companyDataResults = executeQuery("SELECT * FROM companies WHERE id = (SELECT company_id FROM workers WHERE id = ?)", [selectedWorkerId]);
+    const companyData = (companyDataResults[0] || {}) as PDFCompany;
 
-    doc.setFont("helvetica", "normal");
-    doc.rect(15, 35, 180, 45);
-    // Fix instruction 3: workerData?.campo ?? ''
-    doc.text(`Lavoratore: ${workerData?.cognome ?? ''} ${workerData?.nome ?? ''}`, 20, 45);
-    doc.text(`Codice Fiscale: ${workerData?.codice_fiscale ?? 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${workerData?.azienda ?? ''}`, 20, 57);
-    doc.text(`Mansione: ${workerData?.mansione ?? ''}`, 20, 63);
-    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
-    doc.text(`Tipo Visita: ${visitForm.tipo_visita.toUpperCase()}`, 20, 75);
+    const fisioJSON = JSON.stringify({
+      fumo: visitForm.anamnesi_patologica.fumo + (visitForm.anamnesi_patologica.fumo === 'Fumatore' ? ` (${visitForm.anamnesi_patologica.sigarette_die} sig/die)` : ''),
+      alcol: visitForm.anamnesi_patologica.alcol,
+      farmaci_abituali: visitForm.anamnesi_patologica.farmaci_abituali,
+      servizio_leva: visitForm.servizio_leva,
+      note_extra: visitForm.anamnesi_patologica.note_extra
+    });
 
-    doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO:", 20, 90);
-    doc.setFontSize(14);
-    doc.text(visitForm.giudizio.toUpperCase(), 45, 90);
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    if (visitForm.prescrizioni) {
-      doc.text("Prescrizioni/Limitazioni:", 20, 100);
-      doc.text(visitForm.prescrizioni, 20, 107, { maxWidth: 170 });
-    }
-
-    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 140);
-
-    const signatureY = 170;
-    doc.text(`Dott. ${doctorData.nome || '____________________'}`, 130, signatureY);
-    doc.text(`Spec. ${doctorData.specializzazione || '____________________'}`, 130, signatureY + 6);
-    doc.text(`N. Iscr. ${doctorData.n_iscrizione || '_______'}`, 130, signatureY + 12);
-    doc.line(130, signatureY + 14, 190, signatureY + 14);
-    doc.text("Firma del Medico Competente", 135, signatureY + 19);
-
-    doc.save(`Giudizio_${workerData?.cognome ?? ''}_${visitForm.data_visita}.pdf`);
-
-    // CARTELLA SANITARIA E DI RISCHIO
-    const cartella = new jsPDF();
-    cartella.setFontSize(14);
-    cartella.setFont("helvetica", "bold");
-    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 20, { align: 'center' });
-    cartella.setFontSize(10);
-    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 26, { align: 'center' });
-
-    cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
-    cartella.setFont("helvetica", "normal");
-    cartella.text(`Lavoratore: ${workerData?.cognome ?? ''} ${workerData?.nome ?? ''}`, 20, 47);
-    cartella.text(`Azienda: ${workerData?.azienda ?? ''} | Mansione: ${workerData?.mansione ?? ''}`, 20, 53);
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
-    cartella.setFont("helvetica", "normal");
-    cartella.text("Lavorativa:", 20, 72);
-
-    // Format Lavorativa
     const workHistoryText = visitForm.anamnesi_lavorativa.length > 0
       ? visitForm.anamnesi_lavorativa.map(exp => `${exp.da}-${exp.a || 'oggi'}: ${exp.azienda} (${exp.mansione}) - Rischi: ${exp.rischi.join(', ')}`).join('\n')
       : "Negativa";
-
-    const workHistoryLines = (cartella as any).splitTextToSize ? cartella.splitTextToSize(workHistoryText, 165) : [workHistoryText];
-    cartella.text(workHistoryLines, 25, 78);
-
-    let currentYAnamnesi = 78 + (workHistoryLines.length * 5) + 7;
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("Familiare:", 20, currentYAnamnesi);
-    cartella.setFont("helvetica", "normal");
-    currentYAnamnesi += 6;
 
     const familyText = visitForm.anamnesi_familiare
       .filter(m => m.patologie.length > 0 || m.deceduto)
       .map(m => `${m.parentela}: ${m.patologie.join(', ') || 'Nessuna patologia'}${m.deceduto ? ' (Deceduto)' : ''}`)
       .join('\n') || "Negativa";
 
-    const familyLines = (cartella as any).splitTextToSize ? cartella.splitTextToSize(familyText, 165) : [familyText];
-    cartella.text(familyLines, 25, currentYAnamnesi);
-    currentYAnamnesi += (familyLines.length * 5) + 7;
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("Fisiologica:", 20, currentYAnamnesi);
-    cartella.setFont("helvetica", "normal");
-    currentYAnamnesi += 6;
-
-    const fisio = visitForm.anamnesi_patologica;
-    const fisioText = [
-      `Fumo: ${fisio.fumo}${fisio.fumo === 'Fumatore' ? ` (${fisio.sigarette_die} sig/die)` : ''}`,
-      `Alcol: ${fisio.alcol}`,
-      `Attività Fisica: ${fisio.attivita_fisica}`,
-      `Sonno: ${fisio.sonno}`,
-      `Farmaci: ${fisio.farmaci_abituali || 'Nessuno'}`,
-      `Allergie: ${fisio.allergie.nessuna ? 'Nessuna' : fisio.allergie.dettaglio}`,
-      fisio.note_extra ? `Note: ${fisio.note_extra}` : ''
-    ].filter(Boolean).join(' | ');
-
-    const fisioLines = (cartella as any).splitTextToSize ? cartella.splitTextToSize(fisioText, 165) : [fisioText];
-    cartella.text(fisioLines, 25, currentYAnamnesi);
-    currentYAnamnesi += (fisioLines.length * 5) + 10;
-
-    cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, currentYAnamnesi);
-    cartella.setFont("helvetica", "normal");
-    currentYAnamnesi += 7;
-
-    const pesoText = visitForm.peso ? `${visitForm.peso}kg` : 'N/D';
-    const altezzaText = visitForm.altezza ? `${visitForm.altezza}cm` : 'N/D';
-    const bmiVal = calculateBMI();
-    cartella.text(`Peso: ${pesoText} | Altezza: ${altezzaText} | BMI: ${bmiVal}`, 20, currentYAnamnesi + 1);
-
-    const paSist = visitForm.p_sistolica || '--';
-    const paDiast = visitForm.p_diastolica || '--';
-    const freq = visitForm.frequenza || '--';
-    const spo2 = visitForm.spo2 || '--';
-    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm | SpO2: ${spo2}%`, 20, currentYAnamnesi + 6);
-
-    let currentY = currentYAnamnesi + 16;
-    const addEOField = (label: string, text: string) => {
-      if (text) {
-        cartella.setFont("helvetica", "bold");
-        cartella.text(`${label}:`, 20, currentY);
-        cartella.setFont("helvetica", "normal");
-        cartella.text(text, 25, currentY + 6, { maxWidth: 165 });
-        currentY += 15;
-      }
+    const pdfVisit: Partial<PDFVisit> = {
+      data_visita: visitForm.data_visita,
+      tipo_visita: visitForm.tipo_visita,
+      anamnesi_lavorativa: workHistoryText,
+      anamnesi_familiare: familyText,
+      anamnesi_patologica_remota: visitForm.anamnesi_patologica_remota,
+      anamnesi_patologica_prossima: visitForm.anamnesi_patologica_prossima,
+      anamnesi_fisiologica: fisioJSON,
+      allergie: visitForm.anamnesi_patologica.allergie.nessuna ? 'Nessuna' : visitForm.anamnesi_patologica.allergie.dettaglio,
+      vaccinazioni: visitForm.vaccinazioni,
+      giudizio: visitForm.giudizio,
+      prescrizioni: visitForm.prescrizioni,
+      scadenza_prossima: visitForm.scadenza_prossima,
+      accertamenti_effettuati: visitForm.accertamenti_effettuati
     };
 
-    addEOField("Apparato Cardiovascolare", visitForm.eo_cardiaca);
-    addEOField("Apparato Respiratorio", visitForm.eo_respiratoria);
-    addEOField("Apparato Muscoloscheletrico", [visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle, visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori].filter(v => v).join(" | "));
-    addEOField("Altro", visitForm.eo_altro);
+    const doc = generateCompletePDF({
+      mode: 'combined',
+      visit: pdfVisit,
+      worker: workerData as unknown as PDFWorker,
+      company: companyData,
+      doctor: doctorData
+    });
 
-    if (visitForm.accertamenti_effettuati) {
-      cartella.setFont("helvetica", "bold");
-      cartella.text("ACCERTAMENTI STRUMENTALI:", 20, currentY);
-      cartella.setFont("helvetica", "normal");
-      cartella.text(visitForm.accertamenti_effettuati, 25, currentY + 6, { maxWidth: 165 });
-    }
-
-    cartella.save(`Cartella_3A_${workerData?.cognome ?? ''}_${visitForm.data_visita}.pdf`);
+    doc.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
   };
 
   const calculateBMI = () => {
@@ -745,6 +669,22 @@ const NuovaVisita = () => {
                   </div>
 
                   <div className="space-y-6">
+                    {/* LEVA */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Servizio di Leva</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['Svolto', 'Non svolto', 'Esonerato'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => setVisitForm({ ...visitForm, servizio_leva: opt })}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${visitForm.servizio_leva === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-gray-100 hover:border-primary/20'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* SONNO */}
                     <div className="space-y-2">
                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Sonno</label>
@@ -797,6 +737,44 @@ const NuovaVisita = () => {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* ANAMNESI PATOLOGICA */}
+              <div className="space-y-6">
+                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <Stethoscope size={14} /> Anamnesi Patologica
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Patologica Remota (Passata)</label>
+                    <textarea
+                      className="input-standard h-24 text-xs"
+                      placeholder="Interventi, malattie pregresse..."
+                      value={visitForm.anamnesi_patologica_remota}
+                      onChange={e => setVisitForm({...visitForm, anamnesi_patologica_remota: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Patologica Prossima (Attuale)</label>
+                    <textarea
+                      className="input-standard h-24 text-xs"
+                      placeholder="Sintomi attuali, disturbi recenti..."
+                      value={visitForm.anamnesi_patologica_prossima}
+                      onChange={e => setVisitForm({...visitForm, anamnesi_patologica_prossima: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                    <ShieldCheck size={14} /> Vaccinazioni
+                  </label>
+                  <textarea
+                    className="input-standard h-20 text-xs"
+                    placeholder="Antitetanica, Epatite B, etc..."
+                    value={visitForm.vaccinazioni}
+                    onChange={e => setVisitForm({...visitForm, vaccinazioni: e.target.value})}
+                  />
                 </div>
               </div>
 
