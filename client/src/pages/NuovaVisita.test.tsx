@@ -17,6 +17,9 @@ vi.mock('jspdf', () => ({
       text: vi.fn(),
       setFontSize: vi.fn(),
       setFillColor: vi.fn(),
+      setDrawColor: vi.fn(),
+      setLineWidth: vi.fn(),
+      circle: vi.fn(),
       rect: vi.fn(),
       line: vi.fn(),
       save: vi.fn(),
@@ -106,7 +109,7 @@ describe('NuovaVisita Integration', () => {
     // Step 4: Giudizio
     expect(screen.getByText(/Giudizio Finale/i)).toBeInTheDocument();
 
-    const salvaBtn = screen.getByRole('button', { name: /Salva e Stampa/i });
+    const salvaBtn = screen.getByRole('button', { name: /Salva Visita/i });
 
     const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 

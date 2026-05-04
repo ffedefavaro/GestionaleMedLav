@@ -290,7 +290,9 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN anamnesi_patologica_prossima TEXT;",
     "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;",
     "ALTER TABLE visits ADD COLUMN allergie TEXT;",
-    "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;"
+    "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;",
+    "ALTER TABLE visits ADD COLUMN valutazione_rachide TEXT;",
+    "ALTER TABLE visits ADD COLUMN audiometria TEXT;"
   ];
 
   migrations.forEach(m => {

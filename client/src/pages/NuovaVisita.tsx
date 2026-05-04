@@ -107,6 +107,25 @@ interface VisitForm {
   eo_arti_superiori: string;
   eo_arti_inferiori: string;
   eo_altro: string;
+  // New: Spine Evaluation
+  rachide_cervicale: {
+    flette: string;
+    estende: string;
+    ruota_sx: string;
+    ruota_dx: string;
+  };
+  rachide_dorso_lombare: {
+    flette: string;
+    lasegue_dx: string;
+    lasegue_sx: string;
+  };
+  riflessi: {
+    rotulei: string;
+    achillei: string;
+  };
+  // New: Audiometry
+  audiometria_dx: Record<number, string>;
+  audiometria_sx: Record<number, string>;
 }
 
 const FamilyMemberCard = ({
@@ -236,7 +255,13 @@ const NuovaVisita = () => {
     eo_spalle: '',
     eo_arti_superiori: '',
     eo_arti_inferiori: '',
-    eo_altro: ''
+    eo_altro: '',
+    // New
+    rachide_cervicale: { flette: 'Completa', estende: 'Completa', ruota_sx: 'Completa', ruota_dx: 'Completa' },
+    rachide_dorso_lombare: { flette: 'Completa', lasegue_dx: 'Negativo', lasegue_sx: 'Negativo' },
+    riflessi: { rotulei: 'Normoevocabili', achillei: 'Normoevocabili' },
+    audiometria_dx: { 250: '', 500: '', 1000: '', 2000: '', 3000: '', 4000: '', 6000: '', 8000: '' },
+    audiometria_sx: { 250: '', 500: '', 1000: '', 2000: '', 3000: '', 4000: '', 6000: '', 8000: '' }
   });
 
   useEffect(() => {
@@ -353,15 +378,33 @@ const NuovaVisita = () => {
       note_extra: visitForm.anamnesi_patologica.note_extra
     });
 
+    const valutazioneRachide = JSON.stringify({
+      cervicale_flette: visitForm.rachide_cervicale.flette,
+      cervicale_estende: visitForm.rachide_cervicale.estende,
+      cervicale_ruota_sx: visitForm.rachide_cervicale.ruota_sx,
+      cervicale_ruota_dx: visitForm.rachide_cervicale.ruota_dx,
+      dorso_lombare_flette: visitForm.rachide_dorso_lombare.flette,
+      dorso_lombare_lasegue_dx: visitForm.rachide_dorso_lombare.lasegue_dx,
+      dorso_lombare_lasegue_sx: visitForm.rachide_dorso_lombare.lasegue_sx,
+      riflessi_rotulei: visitForm.riflessi.rotulei,
+      riflessi_achillei: visitForm.riflessi.achillei
+    });
+
+    const audiometria = JSON.stringify({
+      dx: visitForm.audiometria_dx,
+      sx: visitForm.audiometria_sx
+    });
+
     // 1. Insert Visit with structured exam fields
     await runCommand(`
       INSERT INTO visits (
         worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica,
         anamnesi_patologica_remota, anamnesi_patologica_prossima, anamnesi_fisiologica, allergie, vaccinazioni,
+        valutazione_rachide, audiometria,
         accertamenti_effettuati, eo_cardiaca, eo_respiratoria, eo_cervicale, eo_dorsolombare,
         eo_spalle, eo_arti_superiori, eo_arti_inferiori, eo_altro, giudizio, prescrizioni, scadenza_prossima, finalized
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `, [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
       JSON.stringify(visitForm.anamnesi_lavorativa),
@@ -372,6 +415,8 @@ const NuovaVisita = () => {
       fisioJSON,
       visitForm.anamnesi_patologica.allergie.nessuna ? 'Nessuna' : visitForm.anamnesi_patologica.allergie.dettaglio,
       visitForm.vaccinazioni,
+      valutazioneRachide,
+      audiometria,
       visitForm.accertamenti_effettuati, visitForm.eo_cardiaca, visitForm.eo_respiratoria,
       visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle,
       visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori, visitForm.eo_altro,
@@ -414,7 +459,7 @@ const NuovaVisita = () => {
     setSelectedWorkerId('');
   };
 
-  const generatePDF = () => {
+  const generatePDF = (mode: 'full' | 'judgment' = 'full') => {
     if (!workerData) return;
 
     const doctorDataResults = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
@@ -440,6 +485,23 @@ const NuovaVisita = () => {
       .map(m => `${m.parentela}: ${m.patologie.join(', ') || 'Nessuna patologia'}${m.deceduto ? ' (Deceduto)' : ''}`)
       .join('\n') || "Negativa";
 
+    const valutazioneRachide = JSON.stringify({
+      cervicale_flette: visitForm.rachide_cervicale.flette,
+      cervicale_estende: visitForm.rachide_cervicale.estende,
+      cervicale_ruota_sx: visitForm.rachide_cervicale.ruota_sx,
+      cervicale_ruota_dx: visitForm.rachide_cervicale.ruota_dx,
+      dorso_lombare_flette: visitForm.rachide_dorso_lombare.flette,
+      dorso_lombare_lasegue_dx: visitForm.rachide_dorso_lombare.lasegue_dx,
+      dorso_lombare_lasegue_sx: visitForm.rachide_dorso_lombare.lasegue_sx,
+      riflessi_rotulei: visitForm.riflessi.rotulei,
+      riflessi_achillei: visitForm.riflessi.achillei
+    });
+
+    const audiometria = JSON.stringify({
+      dx: visitForm.audiometria_dx,
+      sx: visitForm.audiometria_sx
+    });
+
     const pdfVisit: Partial<PDFVisit> = {
       data_visita: visitForm.data_visita,
       tipo_visita: visitForm.tipo_visita,
@@ -450,6 +512,25 @@ const NuovaVisita = () => {
       anamnesi_fisiologica: fisioJSON,
       allergie: visitForm.anamnesi_patologica.allergie.nessuna ? 'Nessuna' : visitForm.anamnesi_patologica.allergie.dettaglio,
       vaccinazioni: visitForm.vaccinazioni,
+      valutazione_rachide: valutazioneRachide,
+      audiometria: audiometria,
+      // EO Params
+      altezza: visitForm.altezza,
+      peso: visitForm.peso,
+      bmi: calculateBMI(),
+      p_sistolica: visitForm.p_sistolica,
+      p_diastolica: visitForm.p_diastolica,
+      frequenza: visitForm.frequenza,
+      spo2: visitForm.spo2,
+      eo_cardiaca: visitForm.eo_cardiaca,
+      eo_respiratoria: visitForm.eo_respiratoria,
+      eo_cervicale: visitForm.eo_cervicale,
+      eo_dorsolombare: visitForm.eo_dorsolombare,
+      eo_spalle: visitForm.eo_spalle,
+      eo_arti_superiori: visitForm.eo_arti_superiori,
+      eo_arti_inferiori: visitForm.eo_arti_inferiori,
+      eo_altro: visitForm.eo_altro,
+      // Conclusion
       giudizio: visitForm.giudizio,
       prescrizioni: visitForm.prescrizioni,
       scadenza_prossima: visitForm.scadenza_prossima,
@@ -457,14 +538,15 @@ const NuovaVisita = () => {
     };
 
     const doc = generateCompletePDF({
-      mode: 'combined',
+      mode: mode,
       visit: pdfVisit,
       worker: workerData as unknown as PDFWorker,
       company: companyData,
       doctor: doctorData
     });
 
-    doc.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+    const suffix = mode === 'full' ? 'Cartella_Completa' : 'Giudizio';
+    doc.save(`${suffix}_${workerData.cognome}_${visitForm.data_visita}.pdf`);
   };
 
   const calculateBMI = () => {
@@ -985,6 +1067,113 @@ const NuovaVisita = () => {
               </div>
             </div>
 
+            {/* VALUTAZIONE RACHIDE */}
+            <div className="bg-primary/5 p-8 rounded-[40px] border border-primary/10 space-y-6">
+              <h3 className="text-primary font-black uppercase text-xs tracking-widest flex items-center gap-2">
+                <Stethoscope size={16} /> Valutazione Funzionale Rachide
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cervicale</p>
+                   {(['flette', 'estende', 'ruota_sx', 'ruota_dx'] as const).map(field => (
+                     <div key={field} className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-gray-500 capitalize">{field.replace('_', ' ')}</label>
+                        <select
+                          className="input-standard h-8 text-[10px]"
+                          value={(visitForm.rachide_cervicale as any)[field]}
+                          onChange={e => setVisitForm({...visitForm, rachide_cervicale: {...visitForm.rachide_cervicale, [field]: e.target.value}})}
+                        >
+                          <option>Completa</option>
+                          <option>Lievemente ridotta</option>
+                          <option>Ridotta</option>
+                          <option>Molto ridotta</option>
+                        </select>
+                     </div>
+                   ))}
+                </div>
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dorso-Lombare</p>
+                   {(['flette', 'lasegue_dx', 'lasegue_sx'] as const).map(field => (
+                     <div key={field} className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-gray-500 capitalize">{field.replace('_', ' ')}</label>
+                        <select
+                          className="input-standard h-8 text-[10px]"
+                          value={(visitForm.rachide_dorso_lombare as any)[field]}
+                          onChange={e => setVisitForm({...visitForm, rachide_dorso_lombare: {...visitForm.rachide_dorso_lombare, [field]: e.target.value}})}
+                        >
+                          <option>Completa</option>
+                          <option>Negativo</option>
+                          <option>Positivo</option>
+                          <option>Lievemente ridotta</option>
+                        </select>
+                     </div>
+                   ))}
+                </div>
+                <div className="space-y-4">
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Riflessi</p>
+                   {(['rotulei', 'achillei'] as const).map(field => (
+                     <div key={field} className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-gray-500 capitalize">{field}</label>
+                        <select
+                          className="input-standard h-8 text-[10px]"
+                          value={(visitForm.riflessi as any)[field]}
+                          onChange={e => setVisitForm({...visitForm, riflessi: {...visitForm.riflessi, [field]: e.target.value}})}
+                        >
+                          <option>Normoevocabili</option>
+                          <option>Ipoevocabili</option>
+                          <option>Assenti</option>
+                        </select>
+                     </div>
+                   ))}
+                </div>
+              </div>
+            </div>
+
+            {/* AUDIOMETRIA */}
+            <div className="bg-tealAction/5 p-8 rounded-[40px] border border-tealAction/10 space-y-6">
+              <h3 className="text-tealAction font-black uppercase text-xs tracking-widest flex items-center gap-2">
+                <Activity size={16} /> Scheda Audiometrica (dB)
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px]">
+                  <thead>
+                    <tr className="text-gray-400 uppercase tracking-widest">
+                      <th className="p-2 text-left">Orecchio</th>
+                      {[250, 500, 1000, 2000, 3000, 4000, 6000, 8000].map(f => <th key={f} className="p-2 text-center">{f}Hz</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="p-2 font-black text-primary">DESTRO</td>
+                      {[250, 500, 1000, 2000, 3000, 4000, 6000, 8000].map(f => (
+                        <td key={f} className="p-1">
+                          <input
+                            type="number"
+                            className="w-full h-8 bg-white border border-gray-100 rounded-lg text-center font-black"
+                            value={visitForm.audiometria_dx[f]}
+                            onChange={e => setVisitForm({...visitForm, audiometria_dx: {...visitForm.audiometria_dx, [f]: e.target.value}})}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-black text-primary">SINISTRO</td>
+                      {[250, 500, 1000, 2000, 3000, 4000, 6000, 8000].map(f => (
+                        <td key={f} className="p-1">
+                          <input
+                            type="number"
+                            className="w-full h-8 bg-white border border-gray-100 rounded-lg text-center font-black"
+                            value={visitForm.audiometria_sx[f]}
+                            onChange={e => setVisitForm({...visitForm, audiometria_sx: {...visitForm.audiometria_sx, [f]: e.target.value}})}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Structured EO Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-6">
@@ -1068,10 +1257,17 @@ const NuovaVisita = () => {
               <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Indietro</button>
               <div className="flex gap-4">
                  <a
-                  // Fix instruction 4 (partially): workerData?.cognome ?? ''
                   href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Visita+Medica:+${workerData?.cognome ?? ''}+${workerData?.nome ?? ''}&dates=${visitForm.scadenza_prossima.replace(/-/g, '')}T090000Z/${visitForm.scadenza_prossima.replace(/-/g, '')}T100000Z&details=Prossima+visita+programmata&sf=true&output=xml`}
                   target="_blank" rel="noopener noreferrer" className="btn-teal px-6 py-5"><RefreshCw size={22} /></a>
-                 <button onClick={handleSave} className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl shadow-accent/20"><Download size={22} strokeWidth={3} /> Salva e Stampa</button>
+                 <div className="flex flex-col gap-2">
+                    <button onClick={handleSave} className="btn-accent px-12 py-4 flex items-center gap-3 shadow-2xl shadow-accent/20">
+                      <Download size={20} strokeWidth={3} /> Salva Visita
+                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => generatePDF('full')} className="btn-teal py-2 px-4 text-[10px] flex-1">Cartella Completa</button>
+                      <button onClick={() => generatePDF('judgment')} className="btn-teal py-2 px-4 text-[10px] flex-1">Solo Giudizio</button>
+                    </div>
+                 </div>
               </div>
             </div>
           </div>
