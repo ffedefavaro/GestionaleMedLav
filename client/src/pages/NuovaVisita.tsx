@@ -321,16 +321,22 @@ const NuovaVisita = () => {
   };
 
   const importEmailText = async (msg: GmailMessage) => {
-    let textToImport = `--- EMAIL del ${msg.date} ---\n${msg.body}\n`;
+  let textToImport = `--- EMAIL del ${msg.date} ---\n${msg.body}\n`;
 
-    if (accessToken) {
-      const attachments = await fetchGmailAttachments(accessToken, msg.id);
-      attachments.forEach(att => {
-        if (att.extractedText) {
-          textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`;
-        }
-      });
-    }
+  if (accessToken) {
+    const attachments = await fetchGmailAttachments(accessToken, msg.id);
+    attachments.forEach(att => {
+      if (att.extractedText) {
+        textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`;
+      }
+    });
+  }
+
+  setVisitForm(prev => ({
+    ...prev,
+    anamnesi_patologica_remota: (prev.anamnesi_patologica_remota ? prev.anamnesi_patologica_remota + "\n\n" : "") + textToImport
+  }));
+};
 
     setVisitForm(prev => ({
       ...prev,
