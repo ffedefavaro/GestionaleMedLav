@@ -119,7 +119,7 @@ const Sicurezza = () => {
                 </tr>
               </thead>
               <tbody>
-                {training.map(t => (
+                {training.map((t: any) => (
                   <tr key={t.id} className="group">
                     <td className="font-black text-primary">{t.cognome}</td>
                     <td>
