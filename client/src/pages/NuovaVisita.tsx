@@ -189,7 +189,35 @@ const NuovaVisita = () => {
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
   const [loadingGmail, setLoadingGmail] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+// Stato per le analisi AI (map da msg.id a EmailAnalysis)
+const [emailAnalyses, setEmailAnalyses] = useState<Record<string, EmailAnalysis | 'loading' | 'error'>>({});
 
+const handleAnalyzeEmail = async (msg: GmailMessage) => {
+  setEmailAnalyses(prev => ({ ...prev, [msg.id]: 'loading' }));
+  try {
+    const attachments = accessToken ? await fetchGmailAttachments(accessToken, msg.id) : [];
+    const analysis = await analyzeEmailWithAI(msg, attachments);
+    setEmailAnalyses(prev => ({ ...prev, [msg.id]: analysis }));
+  } catch (e) {
+    console.error("Analisi AI fallita:", e);
+    setEmailAnalyses(prev => ({ ...prev, [msg.id]: 'error' }));
+  }
+};
+
+const importAnalysis = (analysis: EmailAnalysis) => {
+  const testo = [
+    analysis.tipoEsame.length > 0 ? `Esami: ${analysis.tipoEsame.join(', ')}` : '',
+    analysis.dataEsame ? `Data: ${analysis.dataEsame}` : '',
+    `\n${analysis.diagnosi}`,
+    analysis.valoriAnomali.length > 0 ? `\nAnomalie: ${analysis.valoriAnomali.join(' | ')}` : '',
+    analysis.notePerMedico ? `\nNote: ${analysis.notePerMedico}` : ''
+  ].filter(Boolean).join('\n');
+
+  setVisitForm(prev => ({
+    ...prev,
+    anamnesi_patologica_remota: (prev.anamnesi_patologica_remota ? prev.anamnesi_patologica_remota + "\n\n" : "") + testo
+  }));
+};
   const [visitForm, setVisitForm] = useState<VisitForm>({
     data_visita: new Date().toISOString().split('T')[0],
     tipo_visita: 'periodica',
