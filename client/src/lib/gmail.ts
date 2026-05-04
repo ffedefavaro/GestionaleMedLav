@@ -168,3 +168,75 @@ export const initGoogleAuth = (clientId: string): Promise<TokenClient | TokenRes
     document.body.appendChild(script);
   });
 };
+export const analyzeEmailWithAI = async (
+  msg: GmailMessage,
+  attachments: Attachment[]
+): Promise<EmailAnalysis> => {
+
+  // Costruisci il contenuto multimodale per Claude
+  const contentParts: object[] = [];
+
+  // Testo email
+  contentParts.push({
+    type: "text",
+    text: `Sei un assistente medico per un medico del lavoro italiano. 
+Analizza il seguente contenuto inviato da un paziente e restituisci SOLO un JSON valido senza markdown, con questa struttura:
+{
+  "tipoEsame": ["lista dei tipi di esame trovati"],
+  "diagnosi": "sintesi clinica in linguaggio medico, max 3 righe",
+  "valoriAnomali": ["lista valori fuori range o patologie rilevanti"],
+  "notePerMedico": "cosa il medico deve sapere prima della visita, max 2 righe",
+  "dataEsame": "data referto se trovata, altrimenti null"
+}
+
+Contenuto email del ${msg.date}:
+${msg.body}`
+  });
+
+  // Allegati PDF come documento base64
+  attachments.forEach(att => {
+    if (att.mimeType === 'application/pdf' && att.base64Data) {
+      contentParts.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: att.base64Data
+        }
+      });
+    }
+    // Immagini (RX, ECG fotografati, ecc.)
+    if (att.mimeType?.startsWith('image/') && att.base64Data) {
+      contentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: att.mimeType,
+          data: att.base64Data
+        }
+      });
+    }
+    // Testo estratto da altri allegati
+    if (att.extractedText) {
+      contentParts.push({
+        type: "text",
+        text: `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}`
+      });
+    }
+  });
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: contentParts }]
+    })
+  });
+
+  const data = await response.json();
+  const text = data.content.map((i: {type: string; text?: string}) => i.text || "").join("");
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean) as EmailAnalysis;
+};
