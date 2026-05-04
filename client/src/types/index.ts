@@ -75,3 +75,16 @@ export interface DoctorProfile {
   n_iscrizione: string;
   timbro_immagine: string;
 }
+
+export interface EmailConfig {
+  sender_email: string;
+}
+
+export interface EmailLog {
+  visit_id: number;
+  recipient: string;
+  type: 'reminder_30d' | 'reminder_7d' | 'giudizio';
+  sent_at: string;
+  status: 'success' | 'error';
+  details?: string;
+}
