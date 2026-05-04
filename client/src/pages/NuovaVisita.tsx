@@ -575,15 +575,20 @@ const NuovaVisita = () => {
                 </button>
               </div>
               {gmailMessages.length > 0 && (
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                  {gmailMessages.map(msg => (
-                    <div key={msg.id} className="bg-white/80 p-3 rounded-xl border border-accent/10 text-[10px] flex justify-between items-center gap-4">
-                      <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
-                      <button onClick={() => importEmailText(msg)} className="text-accent hover:underline font-black uppercase tracking-tighter shrink-0">Importa</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+  <div className="space-y-3">
+    <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+      {gmailMessages.map(msg => (
+        <div key={msg.id} className="bg-white/80 p-3 rounded-xl border border-accent/10 text-[10px] flex justify-between items-center gap-4">
+          <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
+          <button onClick={() => importEmailText(msg)} className="text-accent hover:underline font-black uppercase tracking-tighter shrink-0">Importa</button>
+        </div>
+      ))}
+    </div>
+    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+      ↓ Il testo importato viene aggiunto in <span className="text-primary">Anamnesi Patologica Remota</span>
+    </p>
+  </div>
+)}
             </div>
 
             <div className="space-y-12">
