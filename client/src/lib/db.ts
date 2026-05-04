@@ -223,19 +223,6 @@ const createTables = (database: Database) => {
       scadenza_sostituzione DATE,
       FOREIGN KEY (worker_id) REFERENCES workers(id)
     );
-
-    CREATE TABLE IF NOT EXISTS planned_appointments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      worker_id INTEGER NOT NULL,
-      company_id INTEGER NOT NULL,
-      data_proposta DATETIME NOT NULL,
-      stato TEXT NOT NULL, -- pending/confirmed/rescheduled/cancelled
-      note TEXT,
-      data_originale DATETIME,
-      timestamp_modifica DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (worker_id) REFERENCES workers(id),
-      FOREIGN KEY (company_id) REFERENCES companies(id)
-    );
   `);
 
   // Initialize masters
@@ -298,8 +285,7 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN eo_spalle TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_superiori TEXT;",
     "ALTER TABLE visits ADD COLUMN eo_arti_inferiori TEXT;",
-    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;",
-    "CREATE TABLE IF NOT EXISTS planned_appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, worker_id INTEGER NOT NULL, company_id INTEGER NOT NULL, data_proposta DATETIME NOT NULL, stato TEXT NOT NULL, note TEXT, data_originale DATETIME, timestamp_modifica DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (worker_id) REFERENCES workers(id), FOREIGN KEY (company_id) REFERENCES companies(id));"
+    "ALTER TABLE visits ADD COLUMN eo_altro TEXT;"
   ];
 
   migrations.forEach(m => {
