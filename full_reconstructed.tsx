@@ -191,35 +191,7 @@ const NuovaVisita = () => {
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
   const [loadingGmail, setLoadingGmail] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-// Stato per le analisi AI (map da msg.id a EmailAnalysis)
-const [emailAnalyses, setEmailAnalyses] = useState<Record<string, EmailAnalysis | 'loading' | 'error'>>({});
 
-const handleAnalyzeEmail = async (msg: GmailMessage) => {
-  setEmailAnalyses(prev => ({ ...prev, [msg.id]: 'loading' }));
-  try {
-    const attachments = accessToken ? await fetchGmailAttachments(accessToken, msg.id) : [];
-    const analysis = await analyzeEmailWithAI(msg, attachments);
-    setEmailAnalyses(prev => ({ ...prev, [msg.id]: analysis }));
-  } catch (e) {
-    console.error("Analisi AI fallita:", e);
-    setEmailAnalyses(prev => ({ ...prev, [msg.id]: 'error' }));
-  }
-};
-
-const importAnalysis = (analysis: EmailAnalysis) => {
-  const testo = [
-    analysis.tipoEsame.length > 0 ? `Esami: ${analysis.tipoEsame.join(', ')}` : '',
-    analysis.dataEsame ? `Data: ${analysis.dataEsame}` : '',
-    `\n${analysis.diagnosi}`,
-    analysis.valoriAnomali.length > 0 ? `\nAnomalie: ${analysis.valoriAnomali.join(' | ')}` : '',
-    analysis.notePerMedico ? `\nNote: ${analysis.notePerMedico}` : ''
-  ].filter(Boolean).join('\n');
-
-  setVisitForm(prev => ({
-    ...prev,
-    anamnesi_patologica_remota: (prev.anamnesi_patologica_remota ? prev.anamnesi_patologica_remota + "\n\n" : "") + testo
-  }));
-};
   const [visitForm, setVisitForm] = useState<VisitForm>({
     data_visita: new Date().toISOString().split('T')[0],
     tipo_visita: 'periodica',
@@ -353,22 +325,16 @@ const importAnalysis = (analysis: EmailAnalysis) => {
   };
 
   const importEmailText = async (msg: GmailMessage) => {
-  let textToImport = `--- EMAIL del ${msg.date} ---\n${msg.body}\n`;
+    let textToImport = `--- EMAIL del ${msg.date} ---\n${msg.body}\n`;
 
-  if (accessToken) {
-    const attachments = await fetchGmailAttachments(accessToken, msg.id);
-    attachments.forEach(att => {
-      if (att.extractedText) {
-        textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`;
-      }
-    });
-  }
-
-  setVisitForm(prev => ({
-    ...prev,
-    anamnesi_patologica_remota: (prev.anamnesi_patologica_remota ? prev.anamnesi_patologica_remota + "\n\n" : "") + textToImport
-  }));
-};
+    if (accessToken) {
+      const attachments = await fetchGmailAttachments(accessToken, msg.id);
+      attachments.forEach(att => {
+        if (att.extractedText) {
+          textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extractedText}\n`;
+        }
+      });
+    }
 
     setVisitForm(prev => ({
       ...prev,
@@ -617,75 +583,15 @@ const importAnalysis = (analysis: EmailAnalysis) => {
                 </button>
               </div>
               {gmailMessages.length > 0 && (
-  <div className="space-y-3">
-    <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-      {gmailMessages.map(msg => {
-  const analysis = emailAnalyses[msg.id];
-  return (
-    <div key={msg.id} className="bg-white/80 rounded-xl border border-accent/10 overflow-hidden">
-      {/* Riga email */}
-      <div className="p-3 text-[10px] flex justify-between items-center gap-4">
-        <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={() => handleAnalyzeEmail(msg)}
-            disabled={analysis === 'loading'}
-            className="text-primary hover:underline font-black uppercase tracking-tighter"
-          >
-            {analysis === 'loading' ? '⏳ Analisi...' : '🔍 Analizza'}
-          </button>
-          <button
-            onClick={() => importEmailText(msg)}
-            className="text-accent hover:underline font-black uppercase tracking-tighter"
-          >
-            Importa testo
-          </button>
-        </div>
-      </div>
-
-      {/* Pannello analisi AI inline */}
-      {analysis && analysis !== 'loading' && analysis !== 'error' && (
-        <div className="border-t border-accent/10 bg-primary/5 p-3 space-y-2 text-[10px]">
-          {analysis.tipoEsame.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              {analysis.tipoEsame.map(t => (
-                <span key={t} className="bg-primary text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">{t}</span>
-              ))}
-              {analysis.dataEsame && <span className="text-gray-400 font-bold">{analysis.dataEsame}</span>}
-            </div>
-          )}
-          <p className="text-gray-700 font-bold leading-relaxed">{analysis.diagnosi}</p>
-          {analysis.valoriAnomali.length > 0 && (
-            <div className="bg-red-50 border border-red-100 rounded-lg p-2">
-              <span className="text-red-600 font-black uppercase tracking-tighter">⚠ Anomalie: </span>
-              <span className="text-red-700">{analysis.valoriAnomali.join(' · ')}</span>
-            </div>
-          )}
-          {analysis.notePerMedico && (
-            <p className="text-gray-500 italic">{analysis.notePerMedico}</p>
-          )}
-          <button
-            onClick={() => importAnalysis(analysis)}
-            className="btn-accent text-[10px] py-1 px-3 mt-1"
-          >
-            ✓ Importa riepilogo in Anamnesi
-          </button>
-        </div>
-      )}
-      {analysis === 'error' && (
-        <div className="border-t border-red-100 bg-red-50 p-2 text-[10px] text-red-500 font-bold">
-          Analisi fallita. Usa "Importa testo" come fallback.
-        </div>
-      )}
-    </div>
-  );
-})}
-    </div>
-    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
-      ↓ Il testo importato viene aggiunto in <span className="text-primary">Anamnesi Patologica Remota</span>
-    </p>
-  </div>
-)}
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                  {gmailMessages.map(msg => (
+                    <div key={msg.id} className="bg-white/80 p-3 rounded-xl border border-accent/10 text-[10px] flex justify-between items-center gap-4">
+                      <div className="flex-1 font-bold">[{msg.date}] {msg.snippet}</div>
+                      <button onClick={() => importEmailText(msg)} className="text-accent hover:underline font-black uppercase tracking-tighter shrink-0">Importa</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-12">
