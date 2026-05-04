@@ -16,10 +16,14 @@ vi.mock('jspdf', () => ({
       setFont: vi.fn(),
       text: vi.fn(),
       setFontSize: vi.fn(),
+      setFillColor: vi.fn(),
       rect: vi.fn(),
       line: vi.fn(),
       save: vi.fn(),
       addPage: vi.fn(),
+      getNumberOfPages: vi.fn().mockReturnValue(2),
+      setPage: vi.fn(),
+      splitTextToSize: vi.fn().mockReturnValue(['test']),
     };
   }),
 }));

@@ -1,7 +1,7 @@
 import { get } from 'idb-keyval';
 import { initGapiClient } from './gmail';
 import { executeQuery, runCommand } from './db';
-import { generateCompletePDF, type Visit, type Worker, type Company, type DoctorProfile, type WorkHistory, type FamilyHistory, type PhysiologicalHistory } from './pdfGenerator';
+import { generateCompletePDF, type Visit, type Worker, type Company, type DoctorProfile } from './pdfGenerator';
 
 // Extend existing GAPI types from gmail.ts for sending support
 interface GapiSendMessageArgs {
@@ -200,23 +200,6 @@ export const sendGiudizio = async (visitId: number, recipients: { worker?: boole
   const doctors = executeQuery<DoctorProfile>("SELECT * FROM doctor_profile WHERE id = 1");
   const doctor = doctors[0] || {} as DoctorProfile;
 
-  // For simplicity and since they might not be fully used in "judgment only" mode but are required by PDFParams
-  const workHistory: WorkHistory = { esperienze: [], infortuni: 'Nessuno', malattie_professionali: 'No' };
-  const familyHistory: FamilyHistory = {
-    padre: { deceduto: false, patologie: [] },
-    madre: { deceduto: false, patologie: [] },
-    fratelli_sorelle: { deceduto: false, patologie: [] },
-    nonno_paterno: { deceduto: false, patologie: [] },
-    nonna_paterna: { deceduto: false, patologie: [] },
-    nonno_materno: { deceduto: false, patologie: [] },
-    nonna_materna: { deceduto: false, patologie: [] }
-  };
-  const physioHistory: PhysiologicalHistory = {
-    sviluppo: { gravidanza_parto: 'Regolari', psicomotorio: 'Regolare' },
-    puberta: { sviluppo_puberale: 'Regolare', menopausa: false },
-    abitudini: { fumo: 'Non fumatore', alcol: 'No', attivita_fisica: 'Sedentario', dieta: 'Onnivora', nessuna_allergia: true },
-    sonno: { qualita: 'Buona' }
-  };
   const risks: string[] = worker.rischi ? (JSON.parse(worker.rischi) as string[]) : [];
 
   // 2. Generate PDF (Judgment Mode)
@@ -226,9 +209,6 @@ export const sendGiudizio = async (visitId: number, recipients: { worker?: boole
     worker,
     company,
     doctor,
-    workHistory,
-    familyHistory,
-    physioHistory,
     risks
   });
 
