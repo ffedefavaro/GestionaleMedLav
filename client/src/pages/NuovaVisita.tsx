@@ -32,7 +32,6 @@ interface VisitForm {
   p_sistolica: number | string;
   p_diastolica: number | string;
   frequenza: number | string;
-  spo2: number | string;
   eo_cardiaca: string;
   eo_respiratoria: string;
   eo_cervicale: string;
@@ -70,7 +69,6 @@ const NuovaVisita = () => {
     p_sistolica: '',
     p_diastolica: '',
     frequenza: '',
-    spo2: '',
     // Structured Physical Exam
     eo_cardiaca: '',
     eo_respiratoria: '',
@@ -228,7 +226,7 @@ const NuovaVisita = () => {
         visitForm.p_sistolica || null,
         visitForm.p_diastolica || null,
         visitForm.frequenza || null,
-        visitForm.spo2 || null
+        null // spo2 removed
       ]);
     }
 
@@ -318,8 +316,7 @@ const NuovaVisita = () => {
     const paSist = visitForm.p_sistolica || '--';
     const paDiast = visitForm.p_diastolica || '--';
     const freq = visitForm.frequenza || '--';
-    const spo2 = visitForm.spo2 || '--';
-    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm | SpO2: ${spo2}%`, 20, 143);
+    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm`, 20, 143);
 
     let currentY = 153;
     const addEOField = (label: string, text: string) => {
@@ -514,10 +511,6 @@ const NuovaVisita = () => {
               <div className="bg-primary/5 p-4 rounded-3xl border border-primary/10 flex flex-col justify-center items-center gap-1">
                 <span className="text-[9px] font-black text-primary uppercase tracking-widest">BMI</span>
                 <span className="text-2xl font-black text-primary">{calculateBMI()}</span>
-              </div>
-              <div className="bg-warmWhite p-4 rounded-3xl border border-gray-100 flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-primary/40"><Wind size={14} /> <span className="text-[9px] font-black uppercase tracking-widest">SpO2 %</span></div>
-                <input type="number" className="bg-transparent font-black text-xl text-primary outline-none" value={visitForm.spo2} onChange={e => setVisitForm({...visitForm, spo2: e.target.value ? parseInt(e.target.value) : ''})} />
               </div>
             </div>
 
