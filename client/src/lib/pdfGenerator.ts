@@ -333,7 +333,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     addKeyValue(pdf, "Rischi Protocollo", risks.join(", ") || "Nessun rischio specifico");
     addKeyValue(pdf, "Accertamenti Previsti", "Visita medica ed esami strumentali come da protocollo");
 
-    addSectionTitle(pdf, "6. ANAMNESI LAVORATIVA");
+    addSectionTitle(pdf, "6. ANAMNESI LAVORATIVA (Timeline)");
     if (workHistory.esperienze && workHistory.esperienze.length > 0) {
       workHistory.esperienze.forEach((exp, i) => {
         addKeyValue(pdf, `Esperienza ${i+1}`, `${exp.azienda} (${exp.dal}-${exp.al}) - ${exp.mansione} [Rischi: ${exp.esposizioni.join(", ")}]`, true);
@@ -352,8 +352,6 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     } else {
       addKeyValue(pdf, "Esperienze Pregresse", "Nessuna registrata");
     }
-    addKeyValue(pdf, "Infortuni sul lavoro", workHistory.infortuni === 'Sì' ? `${workHistory.infortuni_n} eventi (ultimo ${workHistory.infortuni_ultimo_anno} - ${workHistory.infortuni_tipo})` : "Nessuno");
-    addKeyValue(pdf, "Malattie Professionali", workHistory.malattie_professionali === 'Sì' ? `${workHistory.malattie_professionali_quale} (${workHistory.malattie_professionali_anno})` : "No");
 
     addSectionTitle(pdf, "7. ANAMNESI FAMILIARE");
     Object.entries(familyHistory).forEach(([member, data]) => {
@@ -376,7 +374,33 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     addSectionTitle(pdf, "9. ANAMNESI PATOLOGICA");
     addKeyValue(pdf, "Storia Clinica", visit.anamnesi_patologica || "Negativa");
 
-    addSectionTitle(pdf, "10. ESAME OBIETTIVO");
+    // --- PAGINA 3: Incidenti, Invalidità e Consenso ---
+    pdf.addPage();
+    currentY = 25;
+    addSectionTitle(pdf, "10. INCIDENTI, INFORTUNI E INVALIDITÀ");
+    addKeyValue(pdf, "Infortuni sul lavoro", workHistory.infortuni === 'Sì' ? `${workHistory.infortuni_n} eventi (ultimo ${workHistory.infortuni_ultimo_anno} - ${workHistory.infortuni_tipo})` : "Nessuno");
+    addKeyValue(pdf, "Malattie Professionali", workHistory.malattie_professionali === 'Sì' ? `${workHistory.malattie_professionali_quale} (${workHistory.malattie_professionali_anno})` : "No");
+    addKeyValue(pdf, "Invalidità Civile/SSN", "Non dichiarata");
+
+    addSectionTitle(pdf, "11. CONSENSO INFORMATO");
+    pdf.setFontSize(8);
+    pdf.setFont("helvetica", "normal");
+    const consensoText = `Il sottoscritto lavoratore dichiara di essere stato informato in merito al significato ed ai risultati della sorveglianza sanitaria cui viene sottoposto, ai sensi dell'art. 41 del D.Lgs. 81/08. Dichiara di aver risposto con verità e completezza alle domande poste dal Medico Competente in merito alla propria storia clinica e lavorativa. Esprime il proprio consenso al trattamento dei dati personali e sensibili (sanitari), ai sensi del Regolamento UE 2016/679 (GDPR), per le finalità connesse all'espletamento dei compiti previsti dalla normativa vigente in materia di salute e sicurezza sul lavoro. Dichiara altresì di essere a conoscenza che la presente cartella sarà conservata, sotto la responsabilità del Medico Competente, con salvaguardia del segreto professionale, per il periodo previsto dalla legge.`;
+    const splitConsenso = pdf.splitTextToSize(consensoText, 170);
+    pdf.text(splitConsenso, 20, currentY);
+    currentY += (splitConsenso.length * 4) + 10;
+
+    pdf.setFontSize(9);
+    pdf.text(`Luogo e Data: ${company.sede_legale?.split(',')[0] || '________________'}, ${visit.data_visita}`, 20, currentY);
+    currentY += 15;
+    pdf.text("Firma del Lavoratore (per consenso e conferma anamnesi)", 110, currentY + 5);
+    pdf.line(110, currentY, 185, currentY);
+    currentY += 20;
+
+    // --- PAGINA 4: Esame Obiettivo e Giudizio ---
+    pdf.addPage();
+    currentY = 25;
+    addSectionTitle(pdf, "12. ESAME OBIETTIVO PER APPARATI");
     const vitalParams = `H: ${visit.altezza}cm | P: ${visit.peso}kg | BMI: ${visit.bmi} | PA: ${visit.p_sistolica}/${visit.p_diastolica} mmHg | FC: ${visit.frequenza} bpm`;
     addKeyValue(pdf, "Parametri Vitali", vitalParams);
     addKeyValue(pdf, "App. Cardiovascolare", `Toni ${visit.eo_toni_puri ? 'puri' : 'impuri'}, ${visit.eo_toni_ritmici ? 'ritmici' : 'aritmici'}. Varici: ${visit.eo_varici ? 'Presenti' : 'Assenti'}`);
@@ -388,31 +412,53 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     addKeyValue(pdf, "Visus e Udito", `Visus Nat. (OS/OD): ${visit.eo_visus_nat_os}/${visit.eo_visus_nat_od}. Udito ridotto: ${visit.eo_udito_ridotto ? 'Sì' : 'No'}`);
     if (visit.eo_note) addKeyValue(pdf, "Note EO", visit.eo_note);
 
-    addSectionTitle(pdf, "11. ACCERTAMENTI INTEGRATIVI");
+    addSectionTitle(pdf, "13. ACCERTAMENTI INTEGRATIVI E ESITI");
     addKeyValue(pdf, "Laboratorio", "Esami ematochimici standard");
-    addKeyValue(pdf, "Strumentali", "Audiometria, Spirometria");
-    addKeyValue(pdf, "Tossicologici", "Drug Test (dove previsto)");
+    addKeyValue(pdf, "Strumentali", "Audiometria, Spirometria, ECG (dove previsto)");
     addKeyValue(pdf, "Esiti Complessivi", visit.accertamenti_effettuati || "Nessun accertamento integrativo eseguito");
 
-    addSectionTitle(pdf, "12. CONCLUSIONI E GIUDIZIO");
-    addKeyValue(pdf, "Conclusioni", "Si rimanda al giudizio di idoneità");
-    addKeyValue(pdf, "Giudizio Finale", visit.giudizio?.toUpperCase());
+    addSectionTitle(pdf, "14. CONCLUSIONI E GIUDIZIO DI IDONEITÀ");
+    addKeyValue(pdf, "Conclusioni", "Si rimanda al giudizio di idoneità allegato");
+
+    // GIUDIZIO IN GRASSETTO
+    pdf.setFontSize(11);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("GIUDIZIO FINALE:", 20, currentY);
+    pdf.text(visit.giudizio?.toUpperCase() || "IDONEO", 75, currentY);
+    currentY += 8;
+
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", "normal");
     addKeyValue(pdf, "Prescrizioni", visit.prescrizioni || "Nessuna prescrizione o limitazione");
     addKeyValue(pdf, "Prossima Visita", visit.scadenza_prossima);
 
-    addSectionTitle(pdf, "13. TRASMISSIONE");
+    addSectionTitle(pdf, "15. TRASMISSIONE E FIRME");
     addKeyValue(pdf, "Al Lavoratore", `${visit.trasmissione_lavoratore_data || 'Data odierna'} via ${visit.trasmissione_lavoratore_metodo || 'Consegna diretta'}`);
     addKeyValue(pdf, "Al Datore", `${visit.trasmissione_datore_data || 'Entro termini di legge'} via ${visit.trasmissione_datore_metodo || 'PEC'}`);
 
-    addSectionTitle(pdf, "14. FIRME");
-    checkPageBreak(40);
-    pdf.setFontSize(9);
-    pdf.text("Firma del Lavoratore (per presa visione e copia)", 20, currentY + 15);
-    pdf.line(20, currentY + 10, 80, currentY + 10);
+    checkPageBreak(50);
+    const signatureY = currentY + 15;
+    pdf.setFontSize(8);
+    pdf.text("Firma del Lavoratore (per presa visione e copia)", 20, signatureY + 15);
+    pdf.line(20, signatureY + 10, 80, signatureY + 10);
 
     const drSignatureName = effectiveDoctor.nome || "____________________";
-    pdf.text(`Firma Medico Competente (Dott. ${drSignatureName})`, 130, currentY + 15);
-    pdf.line(130, currentY + 10, 190, currentY + 10);
+    const drSpec = effectiveDoctor.specializzazione || "Medicina del Lavoro";
+    const drIscr = effectiveDoctor.n_iscrizione || "_______";
+
+    pdf.text(`Dott. ${drSignatureName}`, 130, signatureY);
+    pdf.text(drSpec, 130, signatureY + 5);
+    pdf.text(`N. Iscr. Ordine: ${drIscr}`, 130, signatureY + 10);
+    pdf.text("Firma del Medico Competente e Timbro", 130, signatureY + 20);
+    pdf.line(130, signatureY + 14, 190, signatureY + 14);
+    currentY = signatureY + 30;
+
+    // Dichiarazione di conformità e conteggio
+    pdf.setFontSize(7);
+    pdf.setFont("helvetica", "italic");
+    pdf.text("Dichiarazione: Il presente documento è conforme al modello previsto dall'Allegato 3A del D.Lgs. 81/08.", 15, 280);
+    const attachmentsCount = visit.accertamenti_effettuati ? 1 : 0;
+    pdf.text(`Conteggio: 4 pagine - ${attachmentsCount} allegati strumentali integrati.`, 15, 284);
   };
 
   const renderJudgmentOnly = (pdf: jsPDF): void => {

@@ -530,7 +530,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={visitForm[field.id as keyof VisitForm]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -550,7 +550,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={visitForm[field.id as keyof VisitForm]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
