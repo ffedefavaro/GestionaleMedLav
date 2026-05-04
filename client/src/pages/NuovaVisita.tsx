@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope } from 'lucide-react';
+import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
@@ -17,12 +17,74 @@ interface Worker {
   azienda: string;
 }
 
+type FamilyPatology =
+  | 'Ipertensione'
+  | 'Cardiopatie'
+  | 'Diabete'
+  | 'Neoplasie'
+  | 'Malattie polmonari'
+  | 'Renali'
+  | 'Neurologiche'
+  | 'Psichiatriche'
+  | 'Professionali'
+  | 'Altro';
+
+interface FamilyMember {
+  parentela: string;
+  patologie: FamilyPatology[];
+  deceduto: boolean;
+}
+
+interface PhysiologicalHistory {
+  fumo: 'Non fumatore' | 'Ex fumatore' | 'Fumatore';
+  sigarette_die: number | string;
+  alcol: 'No' | 'Occasionale' | 'Quotidiano';
+  attivita_fisica: 'Sedentario' | 'Leggera' | 'Moderata' | 'Intensa';
+  sonno: 'Buono' | 'Disturbi' | 'Insonnia';
+  farmaci_abituali: string;
+  allergie: {
+    nessuna: boolean;
+    dettaglio: string;
+  };
+  note_extra: string;
+}
+
+type RiskFactor =
+  | 'Rumore'
+  | 'VDT'
+  | 'MMC'
+  | 'Chimici'
+  | 'Polveri'
+  | 'Biologico'
+  | 'Vibrazioni'
+  | 'Posture'
+  | 'Turni'
+  | 'Stress';
+
+interface WorkExperience {
+  azienda: string;
+  mansione: string;
+  da: string;
+  a: string;
+  rischi: RiskFactor[];
+}
+
+type EOFieldName =
+  | 'eo_cardiaca'
+  | 'eo_respiratoria'
+  | 'eo_cervicale'
+  | 'eo_dorsolombare'
+  | 'eo_spalle'
+  | 'eo_arti_superiori'
+  | 'eo_arti_inferiori'
+  | 'eo_altro';
+
 interface VisitForm {
   data_visita: string;
   tipo_visita: string;
-  anamnesi_lavorativa: string;
-  anamnesi_familiare: string;
-  anamnesi_patologica: string;
+  anamnesi_lavorativa: WorkExperience[];
+  anamnesi_familiare: FamilyMember[];
+  anamnesi_patologica: PhysiologicalHistory;
   giudizio: string;
   prescrizioni: string;
   accertamenti_effettuati: string;
@@ -43,6 +105,76 @@ interface VisitForm {
   eo_altro: string;
 }
 
+const FamilyMemberCard = ({
+  member,
+  onChange
+}: {
+  member: FamilyMember;
+  onChange: (updated: FamilyMember) => void
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const pathologies: FamilyPatology[] = [
+    'Ipertensione', 'Cardiopatie', 'Diabete', 'Neoplasie',
+    'Malattie polmonari', 'Renali', 'Neurologiche',
+    'Psichiatriche', 'Professionali', 'Altro'
+  ];
+
+  const togglePathology = (pat: FamilyPatology) => {
+    const currentPats = member.patologie;
+    const newPatologie = currentPats.includes(pat)
+      ? currentPats.filter(p => p !== pat)
+      : [...currentPats, pat];
+    onChange({ ...member, patologie: newPatologie });
+  };
+
+  const toggleDeceduto = () => {
+    onChange({ ...member, deceduto: !member.deceduto });
+  };
+
+  const summary = member.patologie.length > 0
+    ? member.patologie.join(', ') + (member.deceduto ? ' (Deceduto)' : '')
+    : (member.deceduto ? 'Deceduto (No patologie segnalate)' : 'Nulla da segnalare');
+
+  return (
+    <div className={`border rounded-2xl p-4 transition-all ${expanded ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10' : 'bg-white border-gray-100 hover:border-primary/20'}`}>
+      <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <div>
+          <p className="text-[10px] font-black text-primary uppercase tracking-tighter">{member.parentela}</p>
+          {!expanded && <p className="text-xs font-medium text-gray-500 truncate max-w-[200px]">{summary}</p>}
+        </div>
+        {expanded ? <ChevronUp size={16} className="text-primary" /> : <ChevronDown size={16} className="text-gray-300" />}
+      </div>
+
+      {expanded && (
+        <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="grid grid-cols-2 gap-2">
+            {pathologies.map(pat => (
+              <label key={pat} className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-primary focus:ring-primary h-3 w-3"
+                  checked={member.patologie.includes(pat)}
+                  onChange={() => togglePathology(pat)}
+                />
+                <span className="text-[10px] font-bold text-gray-600 group-hover:text-primary transition-colors">{pat}</span>
+              </label>
+            ))}
+          </div>
+          <div className="pt-3 border-t border-primary/10 flex items-center justify-between">
+             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Stato in vita</span>
+             <button
+              onClick={toggleDeceduto}
+              className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${member.deceduto ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}
+             >
+              {member.deceduto ? 'Deceduto' : 'In Vita'}
+             </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const NuovaVisita = () => {
   const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
@@ -57,9 +189,26 @@ const NuovaVisita = () => {
   const [visitForm, setVisitForm] = useState<VisitForm>({
     data_visita: new Date().toISOString().split('T')[0],
     tipo_visita: 'periodica',
-    anamnesi_lavorativa: '',
-    anamnesi_familiare: '',
-    anamnesi_patologica: '',
+    anamnesi_lavorativa: [],
+    anamnesi_familiare: [
+      { parentela: 'Padre', patologie: [], deceduto: false },
+      { parentela: 'Madre', patologie: [], deceduto: false },
+      { parentela: 'Fratelli', patologie: [], deceduto: false },
+      { parentela: 'Nonno paterno', patologie: [], deceduto: false },
+      { parentela: 'Nonna paterna', patologie: [], deceduto: false },
+      { parentela: 'Nonno materno', patologie: [], deceduto: false },
+      { parentela: 'Nonna materna', patologie: [], deceduto: false },
+    ],
+    anamnesi_patologica: {
+      fumo: 'Non fumatore',
+      sigarette_die: '',
+      alcol: 'No',
+      attivita_fisica: 'Sedentario',
+      sonno: 'Buono',
+      farmaci_abituali: '',
+      allergie: { nessuna: true, dettaglio: '' },
+      note_extra: ''
+    },
     giudizio: 'idoneo',
     prescrizioni: '',
     accertamenti_effettuati: '',
@@ -177,7 +326,10 @@ const NuovaVisita = () => {
 
     setVisitForm(prev => ({
       ...prev,
-      anamnesi_patologica: prev.anamnesi_patologica + (prev.anamnesi_patologica ? "\n\n" : "") + textToImport
+      anamnesi_patologica: {
+        ...prev.anamnesi_patologica,
+        note_extra: prev.anamnesi_patologica.note_extra + (prev.anamnesi_patologica.note_extra ? "\n\n" : "") + textToImport
+      }
     }));
     alert("Testo e allegati importati in Anamnesi Patologica!");
   };
@@ -195,7 +347,9 @@ const NuovaVisita = () => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `, [
       selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
-      visitForm.anamnesi_lavorativa, visitForm.anamnesi_familiare, visitForm.anamnesi_patologica,
+      JSON.stringify(visitForm.anamnesi_lavorativa),
+      JSON.stringify(visitForm.anamnesi_familiare),
+      JSON.stringify(visitForm.anamnesi_patologica),
       visitForm.accertamenti_effettuati, visitForm.eo_cardiaca, visitForm.eo_respiratoria,
       visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle,
       visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori, visitForm.eo_altro,
@@ -302,26 +456,68 @@ const NuovaVisita = () => {
     cartella.text("SEZIONE 2: ANAMNESI", 15, 65);
     cartella.setFont("helvetica", "normal");
     cartella.text("Lavorativa:", 20, 72);
-    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 78, { maxWidth: 165 });
-    cartella.text("Patologica/Familiare:", 20, 95);
-    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 101, { maxWidth: 165 });
+
+    // Format Lavorativa
+    const workHistoryText = visitForm.anamnesi_lavorativa.length > 0
+      ? visitForm.anamnesi_lavorativa.map(exp => `${exp.da}-${exp.a || 'oggi'}: ${exp.azienda} (${exp.mansione}) - Rischi: ${exp.rischi.join(', ')}`).join('\n')
+      : "Negativa";
+
+    const workHistoryLines = (cartella as any).splitTextToSize ? cartella.splitTextToSize(workHistoryText, 165) : [workHistoryText];
+    cartella.text(workHistoryLines, 25, 78);
+
+    let currentYAnamnesi = 78 + (workHistoryLines.length * 5) + 7;
 
     cartella.setFont("helvetica", "bold");
-    cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, 130);
+    cartella.text("Familiare:", 20, currentYAnamnesi);
     cartella.setFont("helvetica", "normal");
+    currentYAnamnesi += 6;
+
+    const familyText = visitForm.anamnesi_familiare
+      .filter(m => m.patologie.length > 0 || m.deceduto)
+      .map(m => `${m.parentela}: ${m.patologie.join(', ') || 'Nessuna patologia'}${m.deceduto ? ' (Deceduto)' : ''}`)
+      .join('\n') || "Negativa";
+
+    const familyLines = (cartella as any).splitTextToSize ? cartella.splitTextToSize(familyText, 165) : [familyText];
+    cartella.text(familyLines, 25, currentYAnamnesi);
+    currentYAnamnesi += (familyLines.length * 5) + 7;
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("Fisiologica:", 20, currentYAnamnesi);
+    cartella.setFont("helvetica", "normal");
+    currentYAnamnesi += 6;
+
+    const fisio = visitForm.anamnesi_patologica;
+    const fisioText = [
+      `Fumo: ${fisio.fumo}${fisio.fumo === 'Fumatore' ? ` (${fisio.sigarette_die} sig/die)` : ''}`,
+      `Alcol: ${fisio.alcol}`,
+      `Attività Fisica: ${fisio.attivita_fisica}`,
+      `Sonno: ${fisio.sonno}`,
+      `Farmaci: ${fisio.farmaci_abituali || 'Nessuno'}`,
+      `Allergie: ${fisio.allergie.nessuna ? 'Nessuna' : fisio.allergie.dettaglio}`,
+      fisio.note_extra ? `Note: ${fisio.note_extra}` : ''
+    ].filter(Boolean).join(' | ');
+
+    const fisioLines = (cartella as any).splitTextToSize ? cartella.splitTextToSize(fisioText, 165) : [fisioText];
+    cartella.text(fisioLines, 25, currentYAnamnesi);
+    currentYAnamnesi += (fisioLines.length * 5) + 10;
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("SEZIONE 3: PARAMETRI E ESAME OBIETTIVO", 15, currentYAnamnesi);
+    cartella.setFont("helvetica", "normal");
+    currentYAnamnesi += 7;
 
     const pesoText = visitForm.peso ? `${visitForm.peso}kg` : 'N/D';
     const altezzaText = visitForm.altezza ? `${visitForm.altezza}cm` : 'N/D';
     const bmiVal = calculateBMI();
-    cartella.text(`Peso: ${pesoText} | Altezza: ${altezzaText} | BMI: ${bmiVal}`, 20, 137);
+    cartella.text(`Peso: ${pesoText} | Altezza: ${altezzaText} | BMI: ${bmiVal}`, 20, currentYAnamnesi + 1);
 
     const paSist = visitForm.p_sistolica || '--';
     const paDiast = visitForm.p_diastolica || '--';
     const freq = visitForm.frequenza || '--';
     const spo2 = visitForm.spo2 || '--';
-    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm | SpO2: ${spo2}%`, 20, 143);
+    cartella.text(`PA: ${paSist}/${paDiast} mmHg | FC: ${freq} bpm | SpO2: ${spo2}%`, 20, currentYAnamnesi + 6);
 
-    let currentY = 153;
+    let currentY = currentYAnamnesi + 16;
     const addEOField = (label: string, text: string) => {
       if (text) {
         cartella.setFont("helvetica", "bold");
@@ -460,14 +656,304 @@ const NuovaVisita = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
-                <textarea className="input-standard h-40" value={visitForm.anamnesi_lavorativa} onChange={e => setVisitForm({...visitForm, anamnesi_lavorativa: e.target.value})} />
+            <div className="space-y-12">
+              {/* ANAMNESI FAMILIARE */}
+              <div className="space-y-6">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <Heart size={14} /> Anamnesi Familiare
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {visitForm.anamnesi_familiare.map((member, idx) => (
+                    <FamilyMemberCard
+                      key={member.parentela}
+                      member={member}
+                      onChange={(updated) => {
+                        const newFamiliare = [...visitForm.anamnesi_familiare];
+                        newFamiliare[idx] = updated;
+                        setVisitForm({ ...visitForm, anamnesi_familiare: newFamiliare });
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Patologica / Familiare</label>
-                <textarea className="input-standard h-40" value={visitForm.anamnesi_patologica} onChange={e => setVisitForm({...visitForm, anamnesi_patologica: e.target.value})} />
+
+              {/* ANAMNESI FISIOLOGICA */}
+              <div className="space-y-6">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <Activity size={14} /> Anamnesi Fisiologica
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-warmWhite/30 p-8 rounded-[32px] border border-gray-100">
+                  <div className="space-y-6">
+                    {/* FUMO */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Fumo</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['Non fumatore', 'Ex fumatore', 'Fumatore'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, fumo: opt } })}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${visitForm.anamnesi_patologica.fumo === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-gray-100 hover:border-primary/20'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                      {visitForm.anamnesi_patologica.fumo === 'Fumatore' && (
+                        <div className="mt-2 animate-in fade-in slide-in-from-top-1 duration-300">
+                          <input
+                            type="number"
+                            placeholder="N° sigarette/die"
+                            className="input-standard text-xs py-2 h-10"
+                            value={visitForm.anamnesi_patologica.sigarette_die}
+                            onChange={(e) => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, sigarette_die: e.target.value } })}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ALCOL */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Alcol</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['No', 'Occasionale', 'Quotidiano'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, alcol: opt } })}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${visitForm.anamnesi_patologica.alcol === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-gray-100 hover:border-primary/20'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ATTIVITA FISICA */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Attività Fisica</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['Sedentario', 'Leggera', 'Moderata', 'Intensa'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, attivita_fisica: opt } })}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${visitForm.anamnesi_patologica.attivita_fisica === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-gray-100 hover:border-primary/20'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* SONNO */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Sonno</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['Buono', 'Disturbi', 'Insonnia'] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, sonno: opt } })}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${visitForm.anamnesi_patologica.sonno === opt ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-gray-100 hover:border-primary/20'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* FARMACI */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Farmaci abituali</label>
+                      <input
+                        type="text"
+                        className="input-standard text-xs py-2 h-10"
+                        value={visitForm.anamnesi_patologica.farmaci_abituali}
+                        onChange={(e) => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, farmaci_abituali: e.target.value } })}
+                      />
+                    </div>
+
+                    {/* ALLERGIE */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Allergie</label>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                            checked={visitForm.anamnesi_patologica.allergie.nessuna}
+                            onChange={(e) => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, allergie: { ...visitForm.anamnesi_patologica.allergie, nessuna: e.target.checked, dettaglio: e.target.checked ? '' : visitForm.anamnesi_patologica.allergie.dettaglio } } })}
+                          />
+                          <span className="text-[10px] font-bold text-gray-600">Nessuna</span>
+                        </label>
+                        {!visitForm.anamnesi_patologica.allergie.nessuna && (
+                          <input
+                            type="text"
+                            placeholder="Specifica allergie..."
+                            className="input-standard text-xs py-2 h-10 flex-1 animate-in fade-in slide-in-from-left-2 duration-300"
+                            value={visitForm.anamnesi_patologica.allergie.dettaglio}
+                            onChange={(e) => setVisitForm({ ...visitForm, anamnesi_patologica: { ...visitForm.anamnesi_patologica, allergie: { ...visitForm.anamnesi_patologica.allergie, dettaglio: e.target.value } } })}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ANAMNESI LAVORATIVA */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                    <Briefcase size={14} /> Anamnesi Lavorativa
+                  </label>
+                  <button
+                    onClick={() => {
+                      const newExp: WorkExperience = { azienda: '', mansione: '', da: '', a: '', rischi: [] };
+                      setVisitForm({ ...visitForm, anamnesi_lavorativa: [...visitForm.anamnesi_lavorativa, newExp] });
+                    }}
+                    className="btn-teal py-2 px-4 text-[10px] flex items-center gap-2"
+                  >
+                    <Plus size={14} /> Aggiungi Esperienza
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {visitForm.anamnesi_lavorativa.map((exp, idx) => {
+                    const availableRisks: RiskFactor[] = [
+                      'Rumore', 'VDT', 'MMC', 'Chimici', 'Polveri',
+                      'Biologico', 'Vibrazioni', 'Posture', 'Turni', 'Stress'
+                    ];
+
+                    const updateExp = (field: keyof WorkExperience, value: string | RiskFactor[]) => {
+                      const newLavorativa = [...visitForm.anamnesi_lavorativa];
+                      newLavorativa[idx] = { ...newLavorativa[idx], [field]: value };
+                      setVisitForm({ ...visitForm, anamnesi_lavorativa: newLavorativa });
+                    };
+
+                    const toggleRisk = (risk: RiskFactor) => {
+                      const currentRisks = exp.rischi;
+                      const newRisks = currentRisks.includes(risk)
+                        ? currentRisks.filter(r => r !== risk)
+                        : [...currentRisks, risk];
+                      updateExp('rischi', newRisks);
+                    };
+
+                    const removeExp = () => {
+                      setVisitForm({
+                        ...visitForm,
+                        anamnesi_lavorativa: visitForm.anamnesi_lavorativa.filter((_, i) => i !== idx)
+                      });
+                    };
+
+                    return (
+                      <div key={idx} className="bg-white border border-gray-100 p-6 rounded-[32px] space-y-4 relative group hover:border-primary/20 transition-all">
+                        <button
+                          onClick={removeExp}
+                          className="absolute top-6 right-6 text-gray-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="md:col-span-1 space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Azienda</label>
+                            <input
+                              type="text"
+                              className="input-standard h-10 text-xs"
+                              value={exp.azienda}
+                              onChange={(e) => updateExp('azienda', e.target.value)}
+                            />
+                          </div>
+                          <div className="md:col-span-1 space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Mansione</label>
+                            <input
+                              type="text"
+                              className="input-standard h-10 text-xs"
+                              value={exp.mansione}
+                              onChange={(e) => updateExp('mansione', e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Da (anno)</label>
+                            <input
+                              type="number"
+                              className="input-standard h-10 text-xs"
+                              placeholder="AAAA"
+                              value={exp.da}
+                              onChange={(e) => updateExp('da', e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">A (anno)</label>
+                            <input
+                              type="number"
+                              className="input-standard h-10 text-xs"
+                              placeholder="AAAA"
+                              value={exp.a}
+                              onChange={(e) => updateExp('a', e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Rischi Professionali</label>
+                          <div className="flex flex-wrap gap-2">
+                            {availableRisks.map(risk => (
+                              <button
+                                key={risk}
+                                onClick={() => toggleRisk(risk)}
+                                className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${exp.rischi.includes(risk) ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-warmWhite text-gray-400 border border-gray-100 hover:border-accent/20'}`}
+                              >
+                                {risk}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {visitForm.anamnesi_lavorativa.length === 0 && (
+                    <div className="text-center py-12 border-2 border-dashed border-gray-100 rounded-[32px] text-gray-300 font-bold uppercase text-[10px] tracking-widest">
+                      Nessuna esperienza lavorativa precedente inserita
+                    </div>
+                  )}
+
+                  {visitForm.anamnesi_lavorativa.length > 0 && (
+                    <div className="mt-8 p-8 bg-tealAction/5 rounded-[32px] border border-tealAction/10 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Activity size={14} className="text-tealAction" />
+                        <span className="text-[10px] font-black text-tealAction uppercase tracking-widest">Riepilogo Esposizioni Cumulative</span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {[
+                          'Rumore', 'VDT', 'MMC', 'Chimici', 'Polveri',
+                          'Biologico', 'Vibrazioni', 'Posture', 'Turni', 'Stress'
+                        ].map(risk => {
+                          const years = visitForm.anamnesi_lavorativa.reduce((acc, exp) => {
+                            if (exp.rischi.includes(risk as RiskFactor)) {
+                              const da = parseInt(exp.da);
+                              const a = parseInt(exp.a) || new Date().getFullYear();
+                              if (!isNaN(da)) {
+                                return acc + (Math.max(1, a - da));
+                              }
+                            }
+                            return acc;
+                          }, 0);
+
+                          if (years === 0) return null;
+
+                          return (
+                            <div key={risk} className="bg-white p-3 rounded-2xl border border-tealAction/10 flex flex-col items-center justify-center text-center">
+                              <span className="text-[10px] font-black text-primary uppercase leading-tight">{risk}</span>
+                              <span className="text-lg font-black text-tealAction">{years} <span className="text-[8px] uppercase">Anni</span></span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
@@ -537,7 +1023,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={visitForm[field.id as EOFieldName]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
@@ -557,7 +1043,7 @@ const NuovaVisita = () => {
                     <textarea
                       className="input-standard h-20 text-sm"
                       placeholder="Note o 'Regolare'..."
-                      value={(visitForm as any)[field.id]}
+                      value={visitForm[field.id as EOFieldName]}
                       onChange={e => setVisitForm({...visitForm, [field.id]: e.target.value})}
                     />
                   </div>
