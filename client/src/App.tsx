@@ -9,7 +9,6 @@ import { checkSession, logout } from './lib/auth';
 import Login from './pages/Login';
 import Aziende from './pages/Aziende';
 import Lavoratori from './pages/Lavoratori';
-import Protocolli from './pages/Protocolli';
 import NuovaVisita from './pages/NuovaVisita';
 import Scadenziario from './pages/Scadenziario';
 import Sicurezza from './pages/Sicurezza';
@@ -145,7 +144,6 @@ function App() {
             <Route path="/lavoratori" element={<Lavoratori />} />
             <Route path="/nuova-visita" element={<NuovaVisita />} />
             <Route path="/scadenziario" element={<Scadenziario />} />
-            <Route path="/protocolli" element={<Protocolli />} />
             <Route path="/sicurezza" element={<Sicurezza />} />
             <Route path="/registro-esposti" element={<RegistroEsposti />} />
             <Route path="/settings" element={<Settings />} />
