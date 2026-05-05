@@ -23,14 +23,22 @@ const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () 
     doc.setFontSize(10);
     doc.text("(D.Lgs. 81/08 - Art. 41)", 105, 26, { align: 'center' });
 
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return 'N/D';
+      const parts = dateStr.split("-");
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return dateStr;
+    };
+
     doc.setFont("helvetica", "normal");
-    doc.rect(15, 35, 180, 45);
+    doc.rect(15, 35, 180, 52);
     doc.text(`Lavoratore: ${worker.cognome} ${worker.nome}`, 20, 45);
-    doc.text(`Codice Fiscale: ${worker.codice_fiscale || 'N/D'}`, 20, 51);
-    doc.text(`Azienda: ${worker.company_id}`, 20, 57); // Would need join for name
-    doc.text(`Mansione: ${worker.mansione}`, 20, 63);
-    doc.text(`Data Visita: ${visit.data_visita}`, 20, 69);
-    doc.text(`Tipo Visita: ${visit.tipo_visita.toUpperCase()}`, 20, 75);
+    doc.text(`Nato il: ${formatDate(worker.data_nascita)} (${worker.sesso || 'N/D'})`, 20, 51);
+    doc.text(`Codice Fiscale: ${worker.codice_fiscale || 'N/D'}`, 20, 57);
+    doc.text(`Azienda: ${worker.company_id}`, 20, 63); // Would need join for name
+    doc.text(`Mansione: ${worker.mansione}`, 20, 69);
+    doc.text(`Data Visita: ${visit.data_visita}`, 20, 75);
+    doc.text(`Tipo Visita: ${visit.tipo_visita.toUpperCase()}`, 20, 81);
 
     doc.setFont("helvetica", "bold");
     doc.text("GIUDIZIO:", 20, 90);
@@ -65,6 +73,16 @@ const StoricoLavoratore = ({ workerId, onBack }: { workerId: number, onBack: () 
             <div className="bg-tealAction/5 px-4 py-2 rounded-2xl border border-tealAction/5">
                <p className="text-[10px] font-black text-gray-400 uppercase">Email Comunicazioni</p>
                <p className="text-sm font-bold text-tealAction">{worker.email || 'N/D'}</p>
+            </div>
+            <div className="bg-warmWhite px-4 py-2 rounded-2xl border border-gray-100">
+               <p className="text-[10px] font-black text-gray-400 uppercase">Sesso</p>
+               <p className="text-sm font-bold text-primary">{worker.sesso || 'N/D'}</p>
+            </div>
+            <div className="bg-warmWhite px-4 py-2 rounded-2xl border border-gray-100">
+               <p className="text-[10px] font-black text-gray-400 uppercase">Data di Nascita</p>
+               <p className="text-sm font-bold text-primary">
+                 {worker.data_nascita ? worker.data_nascita.split('-').reverse().join('/') : 'N/D'}
+               </p>
             </div>
           </div>
         </div>
