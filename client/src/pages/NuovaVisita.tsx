@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { executeQuery, runCommand } from '../lib/db';
 import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase, ShieldCheck, ListChecks } from 'lucide-react';
 import { generateCompletePDF, type Visit as PDFVisit, type Worker as PDFWorker, type Company as PDFCompany, type DoctorProfile as PDFDoctor } from '../lib/pdfGenerator';
@@ -187,6 +188,8 @@ const FamilyMemberCard = ({
 };
 
 const NuovaVisita = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [lavoratori, setLavoratori] = useState<Worker[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [workerData, setWorkerData] = useState<Worker | null>(null);
@@ -194,6 +197,21 @@ const NuovaVisita = () => {
   const [lastVisit, setLastVisit] = useState<any | null>(null);
   const [showPreFillBanner, setShowPreFillBanner] = useState(false);
   const [preFilledFields, setPreFilledFields] = useState<Set<string>>(new Set());
+
+  // Auto-select worker if passed via state
+  useEffect(() => {
+    if (location.state?.workerId && lavoratori.length > 0) {
+      const wId = location.state.workerId.toString();
+      const worker = lavoratori.find(l => l.id.toString() === wId);
+      if (worker) {
+        setSelectedWorkerId(wId);
+        setWorkerData(worker);
+        setStep(2);
+        // Clear state to avoid re-triggering if user navigates back to this step
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [location.state, lavoratori, navigate, location.pathname]);
 
   // Gmail State
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
