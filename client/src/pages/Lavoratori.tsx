@@ -26,6 +26,7 @@ const Lavoratori = () => {
     codice_fiscale: '',
     email: '',
     data_nascita: '',
+    sesso: '',
     data_assunzione: '',
     protocol_id: '',
     is_protocol_customized: 0,
@@ -117,7 +118,7 @@ const Lavoratori = () => {
 
     const params = [
       formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale,
-      formData.email, formData.data_nascita, formData.data_assunzione,
+      formData.email, formData.data_nascita, formData.sesso, formData.data_assunzione,
       formData.protocol_id, formData.is_protocol_customized,
       JSON.stringify(formData.custom_protocol), formData.protocol_override_reason
     ];
@@ -135,7 +136,7 @@ const Lavoratori = () => {
       await runCommand(
         `UPDATE workers SET
           company_id = ?, nome = ?, cognome = ?, codice_fiscale = ?,
-          email = ?, data_nascita = ?, data_assunzione = ?,
+          email = ?, data_nascita = ?, sesso = ?, data_assunzione = ?,
           protocol_id = ?, is_protocol_customized = ?,
           custom_protocol = ?, protocol_override_reason = ?
         WHERE id = ?`,
@@ -144,10 +145,10 @@ const Lavoratori = () => {
     } else {
       await runCommand(
         `INSERT INTO workers (
-          company_id, nome, cognome, codice_fiscale, email, data_nascita,
+          company_id, nome, cognome, codice_fiscale, email, data_nascita, sesso,
           data_assunzione, protocol_id, is_protocol_customized,
           custom_protocol, protocol_override_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     }
@@ -166,6 +167,7 @@ const Lavoratori = () => {
       codice_fiscale: '',
       email: '',
       data_nascita: '',
+      sesso: '',
       data_assunzione: '',
       protocol_id: '',
       is_protocol_customized: 0,
@@ -182,6 +184,7 @@ const Lavoratori = () => {
       codice_fiscale: l.codice_fiscale,
       email: l.email || '',
       data_nascita: l.data_nascita || '',
+      sesso: l.sesso || '',
       data_assunzione: l.data_assunzione || '',
       protocol_id: l.protocol_id ? l.protocol_id.toString() : '',
       is_protocol_customized: l.is_protocol_customized || 0,
@@ -256,6 +259,22 @@ const Lavoratori = () => {
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email</label>
                 <input type="email" className="input-standard" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data di Nascita</label>
+                <input type="date" className="input-standard" value={formData.data_nascita} onChange={e => setFormData({...formData, data_nascita: e.target.value})} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Sesso</label>
+                <select
+                  className="input-standard"
+                  value={formData.sesso}
+                  onChange={e => setFormData({...formData, sesso: e.target.value})}
+                >
+                  <option value="">Seleziona...</option>
+                  <option value="M">M</option>
+                  <option value="F">F</option>
+                </select>
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Assunzione</label>

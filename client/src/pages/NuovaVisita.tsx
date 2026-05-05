@@ -17,6 +17,7 @@ interface Worker {
   email: string;
   codice_fiscale: string;
   azienda: string;
+  rischi?: string;
 }
 
 type FamilyPatology =
@@ -111,6 +112,8 @@ interface VisitForm {
   eo_altro: string;
   incidenti_invalidita: string; // <!-- MODIFICA -->
   conclusioni: string; // <!-- MODIFICA -->
+  mansione: string;
+  rischi: RiskFactor[];
 }
 
 const FamilyMemberCard = ({
@@ -190,6 +193,9 @@ const NuovaVisita = () => {
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [workerData, setWorkerData] = useState<Worker | null>(null);
   const [step, setStep] = useState(1);
+  const [lastVisit, setLastVisit] = useState<any | null>(null);
+  const [showPreFillBanner, setShowPreFillBanner] = useState(false);
+  const [preFilledFields, setPreFilledFields] = useState<Set<string>>(new Set());
 
   // Auto-select worker if passed via state
   useEffect(() => {
@@ -287,7 +293,9 @@ const importAnalysis = (analysis: EmailAnalysis) => {
     eo_arti_inferiori: '',
     eo_altro: '',
     incidenti_invalidita: '', // <!-- MODIFICA -->
-    conclusioni: '' // <!-- MODIFICA -->
+    conclusioni: '', // <!-- MODIFICA -->
+    mansione: '',
+    rischi: []
   });
 
   useEffect(() => {
@@ -296,7 +304,7 @@ const importAnalysis = (analysis: EmailAnalysis) => {
 
   const fetchWorkers = () => {
     const data = executeQuery(`
-      SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, workers.codice_fiscale, companies.ragione_sociale as azienda
+      SELECT workers.id, workers.nome, workers.cognome, workers.mansione, workers.email, workers.codice_fiscale, workers.rischi, companies.ragione_sociale as azienda
       FROM workers
       JOIN companies ON workers.company_id = companies.id
     `);
@@ -308,6 +316,30 @@ const importAnalysis = (analysis: EmailAnalysis) => {
       const data = lavoratori.find(l => l.id.toString() === selectedWorkerId);
       if (data) {
         setWorkerData(data);
+
+        // Initial pre-fill from worker data
+        setVisitForm(prev => ({
+          ...prev,
+          mansione: data.mansione || '',
+          rischi: data.rischi ? JSON.parse(data.rischi as unknown as string) : []
+        }));
+
+        // Fetch last visit for pre-fill banner
+        const lastVisitResults = executeQuery(`
+          SELECT * FROM visits
+          WHERE worker_id = ? AND finalized = 1
+          ORDER BY data_visita DESC, id DESC
+          LIMIT 1
+        `, [selectedWorkerId]);
+
+        if (lastVisitResults.length > 0) {
+          setLastVisit(lastVisitResults[0]);
+          setShowPreFillBanner(true);
+        } else {
+          setLastVisit(null);
+          setShowPreFillBanner(false);
+          setPreFilledFields(new Set());
+        }
 
         const fullWorkerResults = executeQuery(`
           SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
@@ -338,8 +370,95 @@ const importAnalysis = (analysis: EmailAnalysis) => {
       }
     } else {
       setWorkerData(null);
+      setLastVisit(null);
+      setShowPreFillBanner(false);
+      setPreFilledFields(new Set());
     }
   }, [selectedWorkerId, lavoratori]);
+
+  const handleAcceptPreFill = () => {
+    if (!lastVisit) return;
+
+    const newPreFilled = new Set<string>();
+    const updatedForm = { ...visitForm };
+
+    // 1. Anamnesi Familiare
+    if (lastVisit.anamnesi_familiare) {
+      try {
+        updatedForm.anamnesi_familiare = JSON.parse(lastVisit.anamnesi_familiare);
+        newPreFilled.add('anamnesi_familiare');
+      } catch (e) { console.error("Error parsing anamnesi_familiare", e); }
+    }
+
+    // 2. Anamnesi Fisiologica (stored in anamnesi_patologica column in JSON)
+    if (lastVisit.anamnesi_patologica) {
+      try {
+        updatedForm.anamnesi_patologica = JSON.parse(lastVisit.anamnesi_patologica);
+        newPreFilled.add('anamnesi_patologica');
+      } catch (e) { console.error("Error parsing anamnesi_patologica", e); }
+    }
+
+    // Also extract servizio_leva from anamnesi_fisiologica if available
+    if (lastVisit.anamnesi_fisiologica) {
+      try {
+        const fisioData = JSON.parse(lastVisit.anamnesi_fisiologica);
+        if (fisioData.servizio_leva) {
+          updatedForm.servizio_leva = fisioData.servizio_leva;
+        }
+      } catch (e) { console.error("Error parsing anamnesi_fisiologica", e); }
+    }
+
+    // 3. Anamnesi Lavorativa
+    if (lastVisit.anamnesi_lavorativa) {
+      try {
+        updatedForm.anamnesi_lavorativa = JSON.parse(lastVisit.anamnesi_lavorativa);
+        newPreFilled.add('anamnesi_lavorativa');
+      } catch (e) { console.error("Error parsing anamnesi_lavorativa", e); }
+    }
+
+    // 4. Esame Obiettivo
+    const eoFields = [
+      'eo_cardiaca', 'eo_respiratoria', 'eo_cervicale', 'eo_dorsolombare',
+      'eo_spalle', 'eo_arti_superiori', 'eo_arti_inferiori', 'eo_altro'
+    ];
+
+    eoFields.forEach(f => {
+      if (lastVisit[f] && String(lastVisit[f]).trim() !== "") {
+        (updatedForm as any)[f] = lastVisit[f];
+        newPreFilled.add(f);
+      }
+    });
+
+    // 5. Additional history fields
+    if (lastVisit.anamnesi_patologica_remota) {
+      updatedForm.anamnesi_patologica_remota = lastVisit.anamnesi_patologica_remota;
+      newPreFilled.add('anamnesi_patologica_remota');
+    }
+    if (lastVisit.vaccinazioni) {
+      updatedForm.vaccinazioni = lastVisit.vaccinazioni;
+      newPreFilled.add('vaccinazioni');
+    }
+    if (lastVisit.incidenti_invalidita) {
+      updatedForm.incidenti_invalidita = lastVisit.incidenti_invalidita;
+      newPreFilled.add('incidenti_invalidita');
+    }
+
+    // 6. Mansione and Rischi
+    // Even if not in visits table, we mark them as pre-filled from the current worker state
+    // as requested by the banner flow.
+    if (workerData) {
+      updatedForm.mansione = workerData.mansione || '';
+      try {
+        updatedForm.rischi = workerData.rischi ? JSON.parse(workerData.rischi as unknown as string) : [];
+      } catch(e) {}
+      newPreFilled.add('mansione');
+      newPreFilled.add('rischi');
+    }
+
+    setVisitForm(updatedForm);
+    setPreFilledFields(newPreFilled);
+    setShowPreFillBanner(false);
+  };
 
   const handleGmailSync = async () => {
     const clientId = await get('google_client_id');
@@ -580,6 +699,28 @@ const importAnalysis = (analysis: EmailAnalysis) => {
             </div>
 
             {workerData && (
+              <div className="space-y-4">
+              {preFilledFields.has('mansione') && (
+                <div className="flex justify-end">
+                   <span className="text-[9px] font-black text-primary uppercase bg-primary/5 px-3 py-1 rounded-full border border-primary/10 animate-pulse">
+                    Pre-compilato da visita precedente
+                  </span>
+                </div>
+              )}
+              {showPreFillBanner && (
+                <div className="bg-primary/5 border border-primary/20 p-4 rounded-3xl flex justify-between items-center animate-in fade-in slide-in-from-top-2 duration-500">
+                  <div className="flex items-center gap-3">
+                    <Clipboard className="text-primary" size={20} />
+                    <p className="text-sm font-bold text-gray-700">
+                      Visita precedente del <span className="text-primary">{new Date(lastVisit.data_visita).toLocaleDateString('it-IT')}</span> disponibile — vuoi pre-compilare i dati?
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowPreFillBanner(false)} className="px-4 py-2 text-[10px] font-black uppercase text-gray-400 hover:text-gray-600 transition-colors">Ignora</button>
+                    <button onClick={handleAcceptPreFill} className="btn-primary py-2 px-6 text-[10px]">Pre-compila</button>
+                  </div>
+                </div>
+              )}
               <div className="bg-tealAction/5 p-6 rounded-3xl border border-tealAction/10 flex justify-between items-center group hover:bg-tealAction/10 transition-colors">
                 <div>
                   <p className="text-tealAction font-black text-lg uppercase tracking-tight">{workerData?.azienda ?? ''}</p>
@@ -599,6 +740,7 @@ const importAnalysis = (analysis: EmailAnalysis) => {
                   </select>
                   <button onClick={() => setStep(2)} className="btn-teal flex items-center gap-3 px-8">Inizia <RefreshCw size={18} /></button>
                 </div>
+              </div>
               </div>
             )}
           </div>
@@ -699,11 +841,62 @@ const importAnalysis = (analysis: EmailAnalysis) => {
             </div>
 
             <div className="space-y-12">
+              {/* MANSIONE E RISCHI */}
+              <div className="bg-primary/5 p-8 rounded-[32px] border border-primary/10 space-y-6">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-primary uppercase tracking-widest ml-1 flex items-center gap-2">
+                    <Briefcase size={14} /> Mansione e Rischi Attuali
+                  </label>
+                  {preFilledFields.has('mansione') && (
+                    <span className="text-[9px] font-black text-primary uppercase bg-white px-3 py-1 rounded-full border border-primary/10 animate-pulse">
+                      Pre-compilato
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Mansione Effettiva</label>
+                    <input
+                      type="text"
+                      className="input-standard h-10 text-sm font-bold"
+                      value={visitForm.mansione}
+                      onChange={e => setVisitForm({ ...visitForm, mansione: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Fattori di Rischio</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(['Rumore', 'VDT', 'MMC', 'Chimici', 'Polveri', 'Biologico', 'Vibrazioni', 'Posture', 'Turni', 'Stress'] as RiskFactor[]).map(risk => (
+                        <button
+                          key={risk}
+                          onClick={() => {
+                            const newRischi = visitForm.rischi.includes(risk)
+                              ? visitForm.rischi.filter(r => r !== risk)
+                              : [...visitForm.rischi, risk];
+                            setVisitForm({ ...visitForm, rischi: newRischi });
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${visitForm.rischi.includes(risk) ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-gray-400 border border-gray-100 hover:border-primary/20'}`}
+                        >
+                          {risk}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* ANAMNESI FAMILIARE */}
               <div className="space-y-6">
+                <div className="flex justify-between items-center">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                   <Heart size={14} /> Anamnesi Familiare
                 </label>
+                {preFilledFields.has('anamnesi_familiare') && (
+                  <span className="text-[9px] font-black text-primary uppercase bg-primary/5 px-3 py-1 rounded-full border border-primary/10 animate-pulse">
+                    Pre-compilato da visita precedente
+                  </span>
+                )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {visitForm.anamnesi_familiare.map((member, idx) => (
                     <FamilyMemberCard
@@ -721,9 +914,16 @@ const importAnalysis = (analysis: EmailAnalysis) => {
 
               {/* ANAMNESI FISIOLOGICA */}
               <div className="space-y-6">
+                <div className="flex justify-between items-center">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                   <Activity size={14} /> Anamnesi Fisiologica
                 </label>
+                {preFilledFields.has('anamnesi_patologica') && (
+                  <span className="text-[9px] font-black text-primary uppercase bg-primary/5 px-3 py-1 rounded-full border border-primary/10 animate-pulse">
+                    Pre-compilato da visita precedente
+                  </span>
+                )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-warmWhite/30 p-8 rounded-[32px] border border-gray-100">
                   <div className="space-y-6">
                     {/* FUMO */}
@@ -860,9 +1060,16 @@ const importAnalysis = (analysis: EmailAnalysis) => {
 
               {/* ANAMNESI PATOLOGICA */}
               <div className="space-y-6">
+                 <div className="flex justify-between items-center">
                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                   <Stethoscope size={14} /> Anamnesi Patologica
                 </label>
+                {(preFilledFields.has('anamnesi_patologica_remota') || preFilledFields.has('vaccinazioni') || preFilledFields.has('incidenti_invalidita')) && (
+                  <span className="text-[9px] font-black text-primary uppercase bg-primary/5 px-3 py-1 rounded-full border border-primary/10 animate-pulse">
+                    Pre-compilato da visita precedente
+                  </span>
+                )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="flex flex-col gap-1">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Patologica Remota (Passata)</label>
@@ -908,9 +1115,16 @@ const importAnalysis = (analysis: EmailAnalysis) => {
               {/* ANAMNESI LAVORATIVA */}
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
+                  <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                     <Briefcase size={14} /> Anamnesi Lavorativa
                   </label>
+                  {preFilledFields.has('anamnesi_lavorativa') && (
+                    <span className="text-[9px] font-black text-primary uppercase bg-primary/5 px-3 py-1 rounded-full border border-primary/10 animate-pulse inline-block">
+                      Pre-compilato da visita precedente
+                    </span>
+                  )}
+                  </div>
                   <button
                     onClick={() => {
                       const newExp: WorkExperience = { azienda: '', mansione: '', da: '', a: '', rischi: [] };
@@ -1070,9 +1284,16 @@ const importAnalysis = (analysis: EmailAnalysis) => {
 
         {step === 3 && (
           <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
+            <div className="flex justify-between items-center">
             <div className="flex items-center gap-4 text-primary">
               <div className="p-3 bg-primary/5 rounded-2xl"><Activity size={24} strokeWidth={2.5} /></div>
               <h2 className="text-2xl font-black tracking-tight">Parametri e Esame Obiettivo</h2>
+            </div>
+            {Array.from(preFilledFields).some(f => f.startsWith('eo_')) && (
+                <span className="text-[9px] font-black text-primary uppercase bg-primary/5 px-3 py-1 rounded-full border border-primary/10 animate-pulse">
+                  Pre-compilato da visita precedente
+                </span>
+              )}
             </div>
 
             {/* Vital Signs Grid */}
