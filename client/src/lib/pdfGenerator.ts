@@ -120,6 +120,17 @@ export interface PDFParams {
   risks?: string[];
 }
 
+const formatAccertamenti = (val: any): string => {
+  if (!val || val === "Nulla da segnalare" || val === "Come da protocollo") return val;
+  try {
+    const arr = JSON.parse(val);
+    if (Array.isArray(arr)) {
+      return arr.map((a: any) => `${a.nome}${a.costo !== null ? ` (€ ${a.costo.toFixed(2)})` : ''}`).join(", ");
+    }
+  } catch (e) {}
+  return val;
+};
+
 export const generateCompletePDF = (params: PDFParams): jsPDF => {
   const { mode, visit, worker, company, doctor } = params;
 
@@ -143,17 +154,6 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     }
   }
   if (!effectiveMansione || String(effectiveMansione).toLowerCase() === "null") effectiveMansione = "Nulla da segnalare";
-
-  const formatAccertamenti = (val: any): string => {
-    if (!val || val === "Nulla da segnalare" || val === "Come da protocollo") return val;
-    try {
-      const arr = JSON.parse(val);
-      if (Array.isArray(arr)) {
-        return arr.map((a: any) => `${a.nome}${a.costo !== null ? ` (€ ${a.costo.toFixed(2)})` : ''}`).join(", ");
-      }
-    } catch (e) {}
-    return val;
-  };
 
   const formatValue = (val: any): string => {
     if (val === null || val === undefined || String(val).trim() === "" || String(val).toLowerCase() === "null") {
