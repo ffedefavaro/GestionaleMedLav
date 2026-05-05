@@ -152,7 +152,8 @@ const createTables = (database: Database) => {
     CREATE TABLE IF NOT EXISTS exams_master (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nome TEXT UNIQUE,
-      descrizione TEXT
+      descrizione TEXT,
+      costo_base REAL
     );
 
     CREATE TABLE IF NOT EXISTS visits (
@@ -290,7 +291,8 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN anamnesi_patologica_prossima TEXT;",
     "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;",
     "ALTER TABLE visits ADD COLUMN allergie TEXT;",
-    "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;"
+    "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;",
+    "ALTER TABLE exams_master ADD COLUMN costo_base REAL;"
   ];
 
   migrations.forEach(m => {

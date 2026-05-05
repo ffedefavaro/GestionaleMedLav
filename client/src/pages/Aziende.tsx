@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { Plus, Search, Edit2, Trash2, Building2, MapPin } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Building2, MapPin, ClipboardList, X } from 'lucide-react';
 
 const Aziende = () => {
   const [aziende, setAziende] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [showExamsModal, setShowExamsModal] = useState(false);
+  const [exams, setExams] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     ragione_sociale: '',
@@ -21,9 +23,21 @@ const Aziende = () => {
     setAziende(data);
   };
 
+  const fetchExams = () => {
+    const data = executeQuery("SELECT * FROM exams_master ORDER BY nome ASC");
+    setExams(data);
+  };
+
   useEffect(() => {
     fetchAziende();
+    fetchExams();
   }, []);
+
+  const handleUpdateExamCost = async (id: number, cost: string) => {
+    const numCost = cost === '' ? null : parseFloat(cost);
+    await runCommand("UPDATE exams_master SET costo_base = ? WHERE id = ?", [numCost, id]);
+    fetchExams();
+  };
 
   const handleDelete = async (id: number, name: string) => {
     if (confirm(`Sei sicuro di voler eliminare l'azienda ${name}? Questa azione eliminerà anche tutti i protocolli associati.`)) {
@@ -87,13 +101,81 @@ const Aziende = () => {
           <h1 className="text-4xl font-black text-primary tracking-tight">Gestione Aziende</h1>
           <p className="text-gray-500 font-medium mt-1">Anagrafica clienti e sedi operative</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="btn-accent flex items-center gap-3"
-        >
-          <Plus size={20} strokeWidth={3} /> Nuova Azienda
-        </button>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setShowExamsModal(true)}
+            className="px-6 py-3 rounded-2xl bg-primary/5 text-primary font-black uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-primary/10 transition-all"
+          >
+            <ClipboardList size={18} /> Listino Accertamenti
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="btn-accent flex items-center gap-3"
+          >
+            <Plus size={20} strokeWidth={3} /> Nuova Azienda
+          </button>
+        </div>
       </div>
+
+      {showExamsModal && (
+        <div className="fixed inset-0 bg-primary/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] p-10 max-w-2xl w-full shadow-2xl border border-white max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-2xl font-black text-primary tracking-tight">Listino Accertamenti</h2>
+                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Configurazione costi base</p>
+              </div>
+              <button onClick={() => setShowExamsModal(false)} className="text-gray-300 hover:text-accent transition-colors"><X size={28} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-white z-10 border-b border-gray-100">
+                  <tr>
+                    <th className="py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Accertamento</th>
+                    <th className="py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest w-32">Costo Base €</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {exams.map((exam) => (
+                    <tr key={exam.id} className="group hover:bg-primary/5 transition-colors">
+                      <td className="py-4">
+                        <div className="font-black text-primary text-sm uppercase tracking-tight">{exam.nome}</div>
+                        <div className="text-[10px] text-gray-400 font-bold">{exam.descrizione}</div>
+                      </td>
+                      <td className="py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="--"
+                            className="w-24 bg-warmWhite/50 border border-gray-100 rounded-xl p-2 text-right text-sm font-black outline-none focus:border-primary transition-all"
+                            value={exam.costo_base ?? ''}
+                            onChange={(e) => {
+                              const newExams = exams.map(ex => ex.id === exam.id ? { ...ex, costo_base: e.target.value } : ex);
+                              setExams(newExams);
+                            }}
+                            onBlur={(e) => handleUpdateExamCost(exam.id, e.target.value)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setShowExamsModal(false)}
+                className="btn-primary px-10 py-3"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="glass-card p-10 rounded-[40px] mb-12 border-2 border-primary/5 animate-in fade-in zoom-in duration-300">

@@ -144,6 +144,17 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
   }
   if (!effectiveMansione || String(effectiveMansione).toLowerCase() === "null") effectiveMansione = "Nulla da segnalare";
 
+  const formatAccertamenti = (val: any): string => {
+    if (!val || val === "Nulla da segnalare" || val === "Come da protocollo") return val;
+    try {
+      const arr = JSON.parse(val);
+      if (Array.isArray(arr)) {
+        return arr.map((a: any) => `${a.nome}${a.costo !== null ? ` (€ ${a.costo.toFixed(2)})` : ''}`).join(", ");
+      }
+    } catch (e) {}
+    return val;
+  };
+
   const formatValue = (val: any): string => {
     if (val === null || val === undefined || String(val).trim() === "" || String(val).toLowerCase() === "null") {
       return "Nulla da segnalare";
@@ -232,7 +243,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     }
     currentY = addField(pdf, "Fattori di Rischio", risks, currentY);
 
-    let accertamenti = visit.accertamenti_effettuati || "Come da protocollo";
+    let accertamenti = formatAccertamenti(visit.accertamenti_effettuati || "Come da protocollo");
     currentY = addField(pdf, "Accertamenti", accertamenti, currentY);
   };
 
@@ -357,7 +368,7 @@ const renderPage4 = (pdf: jsPDF, visit: Partial<Visit>, _company: Company, _work
   y = addField(pdf, "Altro", visit.eo_altro, y);
 
   y = addSectionTitle(pdf, "16. ACCERTAMENTI INTEGRATIVI E RISULTATI", y);
-  y = addField(pdf, "Esiti Accertamenti", visit.accertamenti_effettuati, y);
+  y = addField(pdf, "Esiti Accertamenti", formatAccertamenti(visit.accertamenti_effettuati), y);
 
   y = addSectionTitle(pdf, "17. CONCLUSIONI E GIUDIZIO DI IDONEITÀ", y);
   y = addField(pdf, "Conclusioni", visit.conclusioni, y);
