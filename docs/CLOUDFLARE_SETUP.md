@@ -38,3 +38,16 @@ Il workflow GitHub Actions è configurato per:
 - Buildare il progetto (`npm run build`).
 - Caricare il contenuto di `client/dist` su Cloudflare Pages.
 - Gestire il routing SPA tramite il file `client/public/_redirects`.
+
+## 4. Configurazione Anthropic Proxy (Worker)
+
+Il sistema utilizza un Cloudflare Worker come proxy per le API di Anthropic per gestire il CORS.
+
+### Impostare la API Key
+Per configurare la chiave API nel worker `anthropic-proxy`, esegui il seguente comando dalla cartella root del progetto:
+
+```bash
+wrangler secret put ANTHROPIC_API_KEY
+```
+
+Quando richiesto, inserisci la tua API Key di Anthropic.
