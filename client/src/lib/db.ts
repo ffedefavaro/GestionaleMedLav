@@ -292,6 +292,8 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN anamnesi_fisiologica TEXT;",
     "ALTER TABLE visits ADD COLUMN allergie TEXT;",
     "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;",
+"ALTER TABLE workers ADD COLUMN sesso TEXT;",
+    "ALTER TABLE workers ADD COLUMN data_nascita DATE;",
     "ALTER TABLE exams_master ADD COLUMN costo_base REAL;"
   ];
 

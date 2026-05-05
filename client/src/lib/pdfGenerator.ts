@@ -162,6 +162,16 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     return String(val);
   };
 
+  const formatDate = (dateStr: any): string => {
+    if (!dateStr || String(dateStr).trim() === "" || String(dateStr).toLowerCase() === "null") return "N.D.";
+    const d = String(dateStr);
+    const parts = d.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return d;
+  };
+
   const doc = new jsPDF();
   let currentY = 40;
 
@@ -225,7 +235,7 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
     currentY = addSectionTitle(pdf, "3. ANAGRAFICA LAVORATORE", currentY);
     currentY = addField(pdf, "Nominativo", `${worker.cognome} ${worker.nome}`, currentY);
     currentY = addField(pdf, "Codice Fiscale", worker.codice_fiscale, currentY);
-    currentY = addField(pdf, "Data di Nascita", worker.data_nascita, currentY);
+    currentY = addField(pdf, "Data di Nascita", formatDate(worker.data_nascita), currentY);
     currentY = addField(pdf, "Sesso", worker.sesso, currentY);
 
     currentY = addSectionTitle(pdf, "4. DATI OCCUPAZIONALI", currentY);
@@ -294,6 +304,8 @@ export const generateCompletePDF = (params: PDFParams): jsPDF => {
 
     currentY = 60;
     currentY = addField(pdf, "Lavoratore", `${worker.cognome} ${worker.nome}`, currentY);
+    currentY = addField(pdf, "Data di Nascita", formatDate(worker.data_nascita), currentY);
+    currentY = addField(pdf, "Sesso", worker.sesso, currentY);
     currentY = addField(pdf, "Azienda", company.ragione_sociale, currentY);
     currentY = addField(pdf, "Giudizio", visit.giudizio?.toUpperCase(), currentY);
     currentY = addField(pdf, "Prescrizioni", visit.prescrizioni, currentY);
