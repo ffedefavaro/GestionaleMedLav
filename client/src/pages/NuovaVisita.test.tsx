@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import NuovaVisita from './NuovaVisita';
 import * as db from '../lib/db';
 
@@ -73,7 +74,11 @@ describe('NuovaVisita Integration', () => {
   });
 
   it('should complete the visit flow and save data', async () => {
-    render(<NuovaVisita />);
+    render(
+      <MemoryRouter>
+        <NuovaVisita />
+      </MemoryRouter>
+    );
 
     // Step 1: Select Worker
     expect(db.executeQuery).toHaveBeenCalled();

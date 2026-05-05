@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { executeQuery, runCommand } from '../lib/db';
 import {
   Plus, Search, Edit2, Trash2, Filter, ClipboardList,
   Shield, AlertCircle, CheckCircle2, ChevronRight, User,
-  Briefcase, Info, History
+  Briefcase, Info, History, Stethoscope
 } from 'lucide-react';
 import StoricoLavoratore from './StoricoLavoratore';
 
 const Lavoratori = () => {
+  const navigate = useNavigate();
   const [lavoratori, setLavoratori] = useState<any[]>([]);
   const [selectedForHistory, setSelectedForHistory] = useState<number | null>(null);
   const [aziende, setAziende] = useState<any[]>([]);
@@ -462,6 +464,13 @@ const Lavoratori = () => {
                   </td>
                   <td className="px-8 py-6">
                     <div className="flex justify-center items-center gap-2">
+                      <button
+                        onClick={() => navigate('/nuova-visita', { state: { workerId: l.id } })}
+                        className="w-10 h-10 flex items-center justify-center rounded-2xl bg-tealAction/10 text-tealAction hover:bg-tealAction hover:text-white transition-all shadow-lg shadow-tealAction/5"
+                        title="Nuova Visita"
+                      >
+                        <Stethoscope size={20} />
+                      </button>
                       <button
                         onClick={() => setSelectedForHistory(l.id)}
                         className="w-10 h-10 flex items-center justify-center rounded-2xl bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all shadow-lg shadow-primary/5"

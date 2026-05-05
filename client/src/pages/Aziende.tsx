@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { executeQuery, runCommand } from '../lib/db';
-import { Plus, Search, Edit2, Trash2, Building2, MapPin } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Building2, MapPin, Users, Stethoscope, User } from 'lucide-react';
 
 const Aziende = () => {
+  const navigate = useNavigate();
   const [aziende, setAziende] = useState<any[]>([]);
+  const [expandedAziendaId, setExpandedAziendaId] = useState<number | null>(null);
+  const [companyWorkers, setCompanyWorkers] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
@@ -49,6 +53,23 @@ const Aziende = () => {
   };
 
   const [editingId, setEditingId] = useState<number | null>(null);
+
+  const toggleWorkers = (aziendaId: number) => {
+    if (expandedAziendaId === aziendaId) {
+      setExpandedAziendaId(null);
+      setCompanyWorkers([]);
+    } else {
+      const workers = executeQuery(`
+        SELECT workers.*, protocols.mansione as protocol_name
+        FROM workers
+        LEFT JOIN protocols ON workers.protocol_id = protocols.id
+        WHERE workers.company_id = ?
+        ORDER BY cognome ASC
+      `, [aziendaId]);
+      setCompanyWorkers(workers);
+      setExpandedAziendaId(aziendaId);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,49 +226,128 @@ const Aziende = () => {
             </thead>
             <tbody>
               {filtered.map((azienda) => (
-                <tr key={azienda.id} className="group">
-                  <td className="font-black text-primary text-base tracking-tight">{azienda.ragione_sociale}</td>
-                  <td>
-                    <div className="flex flex-col">
-                       <span className="font-mono text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-1">P.IVA / CF</span>
-                       <span className="text-sm font-bold text-gray-600">{azienda.p_iva}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="flex items-center gap-2 text-gray-500 font-bold">
-                       <MapPin size={14} className="text-gray-300" />
-                       {azienda.sede_operativa || 'N/D'}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="flex flex-col gap-1">
-                       <div className="flex items-center gap-2">
-                         <span className="text-[9px] font-black text-tealAction uppercase tracking-tighter bg-tealAction/5 px-2 rounded">RSPP</span>
-                         <span className="text-xs font-bold text-gray-600">{azienda.rspp || '---'}</span>
-                       </div>
-                       <div className="flex items-center gap-2">
-                         <span className="text-[9px] font-black text-accent uppercase tracking-tighter bg-accent/5 px-2 rounded">RLS</span>
-                         <span className="text-xs font-bold text-gray-600">{azienda.rls || '---'}</span>
-                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="flex justify-center gap-2">
-                      <button
-                        onClick={() => handleEdit(azienda)}
-                        className="p-3 hover:bg-tealAction/10 text-tealAction rounded-2xl transition-all"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(azienda.id, azienda.ragione_sociale)}
-                        className="p-3 hover:bg-accent/10 text-accent rounded-2xl transition-all"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <React.Fragment key={azienda.id}>
+                  <tr className={`group ${expandedAziendaId === azienda.id ? 'bg-primary/5' : ''}`}>
+                    <td className="font-black text-primary text-base tracking-tight">
+                      <div className="flex items-center gap-3">
+                        {azienda.ragione_sociale}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex flex-col">
+                         <span className="font-mono text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-1">P.IVA / CF</span>
+                         <span className="text-sm font-bold text-gray-600">{azienda.p_iva}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2 text-gray-500 font-bold">
+                         <MapPin size={14} className="text-gray-300" />
+                         {azienda.sede_operativa || 'N/D'}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex flex-col gap-1">
+                         <div className="flex items-center gap-2">
+                           <span className="text-[9px] font-black text-tealAction uppercase tracking-tighter bg-tealAction/5 px-2 rounded">RSPP</span>
+                           <span className="text-xs font-bold text-gray-600">{azienda.rspp || '---'}</span>
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <span className="text-[9px] font-black text-accent uppercase tracking-tighter bg-accent/5 px-2 rounded">RLS</span>
+                           <span className="text-xs font-bold text-gray-600">{azienda.rls || '---'}</span>
+                         </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => toggleWorkers(azienda.id)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${expandedAziendaId === azienda.id ? 'bg-primary text-white' : 'bg-primary/5 text-primary hover:bg-primary/10'}`}
+                        >
+                          <Users size={16} /> Lavoratori
+                        </button>
+                        <button
+                          onClick={() => handleEdit(azienda)}
+                          className="p-3 hover:bg-tealAction/10 text-tealAction rounded-2xl transition-all"
+                          title="Modifica"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(azienda.id, azienda.ragione_sociale)}
+                          className="p-3 hover:bg-accent/10 text-accent rounded-2xl transition-all"
+                          title="Elimina"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedAziendaId === azienda.id && (
+                    <tr className="bg-primary/[0.02] animate-in fade-in slide-in-from-top-2 duration-300">
+                      <td colSpan={5} className="p-8">
+                        <div className="bg-white rounded-[32px] border border-primary/10 shadow-xl overflow-hidden">
+                          <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                            <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                              <Users size={18} className="text-primary" /> Lavoratori di {azienda.ragione_sociale}
+                            </h4>
+                            <span className="text-[10px] font-black text-gray-400 uppercase bg-white px-3 py-1 rounded-full border border-gray-100">
+                              {companyWorkers.length} dipendenti
+                            </span>
+                          </div>
+                          <table className="w-full text-left">
+                            <thead className="bg-gray-50/30">
+                              <tr>
+                                <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Nominativo</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Mansione</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Azioni Rapide</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {companyWorkers.map(worker => (
+                                <tr key={worker.id} className="hover:bg-primary/[0.01] transition-colors">
+                                  <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-[10px]">
+                                        {worker.cognome?.[0] ?? ''}{worker.nome?.[0] ?? ''}
+                                      </div>
+                                      <div>
+                                        <div className="font-black text-primary text-sm">{worker.cognome ?? ''} {worker.nome ?? ''}</div>
+                                        <div className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">{worker.codice_fiscale}</div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="text-xs font-bold text-gray-600">{worker.protocol_name || '---'}</span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <div className="flex justify-center gap-2">
+                                      <button
+                                        onClick={() => navigate('/nuova-visita', { state: { workerId: worker.id } })}
+                                        className="flex items-center gap-2 px-4 py-2 bg-tealAction/10 text-tealAction rounded-xl font-black uppercase text-[9px] tracking-widest hover:bg-tealAction hover:text-white transition-all shadow-sm shadow-tealAction/5"
+                                      >
+                                        <Stethoscope size={14} /> Nuova Visita
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                              {companyWorkers.length === 0 && (
+                                <tr>
+                                  <td colSpan={3} className="p-10 text-center">
+                                    <div className="flex flex-col items-center gap-2 opacity-30">
+                                      <User size={32} />
+                                      <p className="text-[10px] font-black uppercase tracking-widest">Nessun lavoratore assegnato</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
