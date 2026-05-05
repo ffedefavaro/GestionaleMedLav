@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { executeQuery, runCommand } from '../lib/db';
-import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase, ShieldCheck } from 'lucide-react';
+import { User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Heart, Weight, Ruler, Wind, Stethoscope, ChevronDown, ChevronUp, Plus, Trash2, Briefcase, ShieldCheck, ListChecks } from 'lucide-react';
 import { generateCompletePDF, type Visit as PDFVisit, type Worker as PDFWorker, type Company as PDFCompany, type DoctorProfile as PDFDoctor } from '../lib/pdfGenerator';
 import { fetchGmailMessages, type GmailMessage, initGapiClient, type TokenResponse, analyzeEmailWithAI } from '../lib/gmail';
 import type { EmailAnalysis } from '../types';
@@ -95,6 +95,7 @@ interface VisitForm {
   giudizio: string;
   prescrizioni: string;
   accertamenti_effettuati: string;
+  accertamenti_checklist: { nome: string; eseguito: boolean; costo: number | null }[];
   scadenza_prossima: string;
   peso: number | string;
   altezza: number | string;
@@ -275,6 +276,7 @@ const importAnalysis = (analysis: EmailAnalysis) => {
     giudizio: 'idoneo',
     prescrizioni: '',
     accertamenti_effettuati: '',
+    accertamenti_checklist: [],
     scadenza_prossima: '',
     // Biometrics
     peso: '',
@@ -351,6 +353,33 @@ const importAnalysis = (analysis: EmailAnalysis) => {
         const fullWorker = fullWorkerResults[0];
 
         if (fullWorker) {
+          // Caricamento accertamenti dal protocollo
+          let protocolExams: any[] = [];
+          try {
+            if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
+              protocolExams = JSON.parse(fullWorker.custom_protocol as string);
+            } else {
+              const protocolResults = executeQuery("SELECT esami FROM protocols WHERE id = ?", [fullWorker.protocol_id]);
+              if (protocolResults[0]) {
+                protocolExams = JSON.parse(protocolResults[0].esami as string);
+              }
+            }
+
+            // Recupero costi base dai master
+            const masterExams = executeQuery("SELECT nome, costo_base FROM exams_master");
+            const checklist = protocolExams.map((e: any) => {
+              const master = masterExams.find((m: any) => m.nome === e.nome);
+              return {
+                nome: e.nome,
+                eseguito: true,
+                costo: master ? master.costo_base : null
+              };
+            });
+            setVisitForm(prev => ({ ...prev, accertamenti_checklist: checklist }));
+          } catch (e) {
+            console.error("Error loading protocol exams", e);
+          }
+
           let months = (fullWorker.protocol_periodicity as number) || 12;
           if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
             try {
@@ -520,6 +549,8 @@ const importAnalysis = (analysis: EmailAnalysis) => {
       note_extra: visitForm.anamnesi_patologica.note_extra
     });
 
+    const accertamentiJSON = JSON.stringify(visitForm.accertamenti_checklist.filter(a => a.eseguito));
+
     // 1. Insert Visit with structured exam fields
     await runCommand(`
       INSERT INTO visits (
@@ -539,7 +570,7 @@ const importAnalysis = (analysis: EmailAnalysis) => {
       fisioJSON,
       visitForm.anamnesi_patologica.allergie.nessuna ? 'Nessuna' : visitForm.anamnesi_patologica.allergie.dettaglio,
       visitForm.vaccinazioni,
-      visitForm.accertamenti_effettuati, visitForm.eo_cardiaca, visitForm.eo_respiratoria,
+      accertamentiJSON, visitForm.eo_cardiaca, visitForm.eo_respiratoria,
       visitForm.eo_cervicale, visitForm.eo_dorsolombare, visitForm.eo_spalle,
       visitForm.eo_arti_superiori, visitForm.eo_arti_inferiori, visitForm.eo_altro,
       visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
@@ -556,22 +587,30 @@ const importAnalysis = (analysis: EmailAnalysis) => {
       );
 
       // 2. Insert Biometrics
-      const peso = typeof visitForm.peso === 'number' ? visitForm.peso : parseFloat(visitForm.peso as string) || 0;
-      const altezza = typeof visitForm.altezza === 'number' ? visitForm.altezza : parseFloat(visitForm.altezza as string) || 1; // avoid div by zero
-      const bmi = peso / ((altezza / 100) ** 2);
+      const pesoVal = typeof visitForm.peso === 'number' ? visitForm.peso : parseFloat(visitForm.peso as string);
+      const altezzaVal = typeof visitForm.altezza === 'number' ? visitForm.altezza : parseFloat(visitForm.altezza as string);
+
+      const peso = isNaN(pesoVal) ? null : pesoVal;
+      const altezza = isNaN(altezzaVal) ? null : altezzaVal;
+      const bmi = (peso && altezza) ? peso / ((altezza / 100) ** 2) : null;
+
+      const p_sistolica = typeof visitForm.p_sistolica === 'number' ? visitForm.p_sistolica : parseInt(visitForm.p_sistolica as string);
+      const p_diastolica = typeof visitForm.p_diastolica === 'number' ? visitForm.p_diastolica : parseInt(visitForm.p_diastolica as string);
+      const frequenza = typeof visitForm.frequenza === 'number' ? visitForm.frequenza : parseInt(visitForm.frequenza as string);
+      const spo2 = typeof visitForm.spo2 === 'number' ? visitForm.spo2 : parseInt(visitForm.spo2 as string);
 
       await runCommand(`
         INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca, spo2)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         lastVisitData.id,
-        visitForm.peso || null,
-        visitForm.altezza || null,
-        visitForm.peso && visitForm.altezza ? bmi : null,
-        visitForm.p_sistolica || null,
-        visitForm.p_diastolica || null,
-        visitForm.frequenza || null,
-        visitForm.spo2 || null
+        peso,
+        altezza,
+        bmi,
+        isNaN(p_sistolica) ? null : p_sistolica,
+        isNaN(p_diastolica) ? null : p_diastolica,
+        isNaN(frequenza) ? null : frequenza,
+        isNaN(spo2) ? null : spo2
       ]);
     }
 
@@ -1334,6 +1373,42 @@ const importAnalysis = (analysis: EmailAnalysis) => {
             </div>
 
             {/* Structured EO Grid */}
+            {/* Accertamenti Checklist */}
+            <div className="bg-primary/5 p-8 rounded-[40px] border border-primary/10 mb-8">
+              <div className="flex items-center gap-4 text-primary mb-6">
+                <div className="p-2 bg-primary/10 rounded-xl"><ListChecks size={20} /></div>
+                <h3 className="text-lg font-black tracking-tight uppercase">Accertamenti eseguiti in visita</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visitForm.accertamenti_checklist.map((item, idx) => (
+                  <label key={idx} className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all ${item.eseguito ? 'bg-white border-primary shadow-md' : 'bg-warmWhite/50 border-gray-100 opacity-60'}`}>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded-lg text-primary focus:ring-primary border-gray-300"
+                        checked={item.eseguito}
+                        onChange={e => {
+                          const newChecklist = [...visitForm.accertamenti_checklist];
+                          newChecklist[idx].eseguito = e.target.checked;
+                          setVisitForm({ ...visitForm, accertamenti_checklist: newChecklist });
+                        }}
+                      />
+                      <div>
+                        <p className="text-xs font-black text-primary uppercase leading-none">{item.nome}</p>
+                        {item.costo !== null && <p className="text-[10px] text-gray-400 font-bold mt-1">€ {item.costo.toFixed(2)}</p>}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+                {visitForm.accertamenti_checklist.length === 0 && (
+                   <p className="col-span-full text-center py-4 text-gray-400 font-bold text-xs uppercase tracking-widest italic">
+                     Nessun accertamento previsto dal protocollo
+                   </p>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-6">
                 {[
