@@ -1,8 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { initGapiClient, type GmailMessageDetail, type GmailPart } from './gmail';
 
-// Configure worker with a reliable CDN matching installed version
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.6.205/pdf.worker.min.mjs`;
+// Configure worker using local file from pdfjs-dist
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url
+).toString();
 
 export interface Attachment {
   filename: string;
