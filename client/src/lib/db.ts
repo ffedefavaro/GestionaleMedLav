@@ -19,6 +19,13 @@ export interface Worker {
   rischi: string;
   protocol_id: number | null;
   azienda?: string;
+  tipo_contratto?: string;
+  part_time?: number;
+  lavoratore_notturno?: number;
+  lavoratore_videoterminale?: number;
+  lavoratore_straniero?: number;
+  cittadinanza?: string;
+  telefono?: string;
 }
 
 let db: Database | null = null;
@@ -294,7 +301,14 @@ const runMigrations = (database: Database) => {
     "ALTER TABLE visits ADD COLUMN vaccinazioni TEXT;",
 "ALTER TABLE workers ADD COLUMN sesso TEXT;",
     "ALTER TABLE workers ADD COLUMN data_nascita DATE;",
-    "ALTER TABLE exams_master ADD COLUMN costo_base REAL;"
+    "ALTER TABLE exams_master ADD COLUMN costo_base REAL;",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS tipo_contratto TEXT;",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS part_time INTEGER DEFAULT 0;",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS lavoratore_notturno INTEGER DEFAULT 0;",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS lavoratore_videoterminale INTEGER DEFAULT 0;",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS lavoratore_straniero INTEGER DEFAULT 0;",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS cittadinanza TEXT DEFAULT 'Italiana';",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS telefono TEXT;"
   ];
 
   migrations.forEach(m => {

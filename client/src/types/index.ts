@@ -30,6 +30,13 @@ export interface Worker {
   protocol_override_reason?: string;
   azienda?: string; // Joined field
   protocol_name?: string; // Joined field
+  tipo_contratto?: string;
+  part_time?: number;
+  lavoratore_notturno?: number;
+  lavoratore_videoterminale?: number;
+  lavoratore_straniero?: number;
+  cittadinanza?: string;
+  telefono?: string;
 }
 
 export interface Protocol {
