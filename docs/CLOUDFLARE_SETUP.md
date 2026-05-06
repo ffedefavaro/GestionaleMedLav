@@ -21,7 +21,10 @@ Questa guida spiega come configurare Cloudflare Pages per il deploy automatico t
 1. Vai su **My Profile** > **API Tokens**.
 2. Clicca su **Create Token**.
 3. Usa il template **Edit Cloudflare Pages**.
-4. Configura i permessi (solitamente `Account > Cloudflare Pages > Edit`).
+4. Configura i permessi aggiungendo anche quelli per i Workers (necessari per il proxy Anthropic):
+   - `Account > Cloudflare Pages > Edit`
+   - `Account > Workers Scripts > Edit`
+   - `User > User Details > Read` (opzionale, evita avvisi di Wrangler)
 5. Copia il token generato.
 
 ## 3. Aggiungere i Secrets su GitHub
