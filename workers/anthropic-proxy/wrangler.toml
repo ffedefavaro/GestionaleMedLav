@@ -2,6 +2,4 @@ name = "anthropic-proxy"
 main = "index.ts"
 compatibility_date = "2024-01-01"
 
-[[routes]]
-pattern = "gestionalemedlav.pages.dev/api/ai"
-zone_name = "gestionalemedlav.pages.dev"
+# No routes needed for workers.dev or custom domains managed differently
