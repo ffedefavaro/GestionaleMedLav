@@ -31,7 +31,14 @@ const Lavoratori = () => {
     protocol_id: '',
     is_protocol_customized: 0,
     custom_protocol: [] as any[],
-    protocol_override_reason: ''
+    protocol_override_reason: '',
+    tipo_contratto: '',
+    part_time: 0,
+    lavoratore_notturno: 0,
+    lavoratore_videoterminale: 0,
+    lavoratore_straniero: 0,
+    cittadinanza: 'Italiana',
+    telefono: ''
   });
 
   const fetchData = () => {
@@ -120,7 +127,10 @@ const Lavoratori = () => {
       formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale,
       formData.email, formData.data_nascita, formData.sesso, formData.data_assunzione,
       formData.protocol_id, formData.is_protocol_customized,
-      JSON.stringify(formData.custom_protocol), formData.protocol_override_reason
+      JSON.stringify(formData.custom_protocol), formData.protocol_override_reason,
+      formData.tipo_contratto, formData.part_time, formData.lavoratore_notturno,
+      formData.lavoratore_videoterminale, formData.lavoratore_straniero,
+      formData.cittadinanza, formData.telefono
     ];
 
     if (editingId) {
@@ -138,7 +148,10 @@ const Lavoratori = () => {
           company_id = ?, nome = ?, cognome = ?, codice_fiscale = ?,
           email = ?, data_nascita = ?, sesso = ?, data_assunzione = ?,
           protocol_id = ?, is_protocol_customized = ?,
-          custom_protocol = ?, protocol_override_reason = ?
+          custom_protocol = ?, protocol_override_reason = ?,
+          tipo_contratto = ?, part_time = ?, lavoratore_notturno = ?,
+          lavoratore_videoterminale = ?, lavoratore_straniero = ?,
+          cittadinanza = ?, telefono = ?
         WHERE id = ?`,
         [...params, editingId]
       );
@@ -147,8 +160,11 @@ const Lavoratori = () => {
         `INSERT INTO workers (
           company_id, nome, cognome, codice_fiscale, email, data_nascita, sesso,
           data_assunzione, protocol_id, is_protocol_customized,
-          custom_protocol, protocol_override_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          custom_protocol, protocol_override_reason,
+          tipo_contratto, part_time, lavoratore_notturno,
+          lavoratore_videoterminale, lavoratore_straniero,
+          cittadinanza, telefono
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
     }
@@ -172,7 +188,14 @@ const Lavoratori = () => {
       protocol_id: '',
       is_protocol_customized: 0,
       custom_protocol: [],
-      protocol_override_reason: ''
+      protocol_override_reason: '',
+      tipo_contratto: '',
+      part_time: 0,
+      lavoratore_notturno: 0,
+      lavoratore_videoterminale: 0,
+      lavoratore_straniero: 0,
+      cittadinanza: 'Italiana',
+      telefono: ''
     });
   };
 
@@ -189,7 +212,14 @@ const Lavoratori = () => {
       protocol_id: l.protocol_id ? l.protocol_id.toString() : '',
       is_protocol_customized: l.is_protocol_customized || 0,
       custom_protocol: l.custom_protocol || [],
-      protocol_override_reason: l.protocol_override_reason || ''
+      protocol_override_reason: l.protocol_override_reason || '',
+      tipo_contratto: l.tipo_contratto || '',
+      part_time: l.part_time || 0,
+      lavoratore_notturno: l.lavoratore_notturno || 0,
+      lavoratore_videoterminale: l.lavoratore_videoterminale || 0,
+      lavoratore_straniero: l.lavoratore_straniero || 0,
+      cittadinanza: l.cittadinanza || 'Italiana',
+      telefono: l.telefono || ''
     });
     setEditingId(l.id);
     setShowForm(true);
@@ -280,6 +310,71 @@ const Lavoratori = () => {
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Assunzione</label>
                 <input type="date" className="input-standard" value={formData.data_assunzione} onChange={e => setFormData({...formData, data_assunzione: e.target.value})} />
               </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tipo Contratto</label>
+                <select
+                  className="input-standard"
+                  value={formData.tipo_contratto}
+                  onChange={e => setFormData({...formData, tipo_contratto: e.target.value})}
+                >
+                  <option value="">Seleziona...</option>
+                  <option value="Indeterminato">Indeterminato</option>
+                  <option value="Determinato">Determinato</option>
+                  <option value="Apprendistato">Apprendistato</option>
+                  <option value="Somministrato">Somministrato</option>
+                  <option value="Altro">Altro</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Telefono</label>
+                <input className="input-standard" value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value})} />
+              </div>
+              {formData.lavoratore_straniero === 1 && (
+                <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cittadinanza</label>
+                  <input className="input-standard" value={formData.cittadinanza} onChange={e => setFormData({...formData, cittadinanza: e.target.value})} />
+                </div>
+              )}
+            </div>
+
+            {/* Checkbox Opzioni */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 bg-primary/5 p-6 rounded-[24px] border border-primary/5">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="w-5 h-5 rounded-lg border-2 border-gray-300 text-tealAction focus:ring-tealAction transition-all"
+                  checked={formData.part_time === 1}
+                  onChange={e => setFormData({...formData, part_time: e.target.checked ? 1 : 0})}
+                />
+                <span className="text-xs font-black text-primary uppercase tracking-tight group-hover:text-tealAction transition-colors">Part-time</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="w-5 h-5 rounded-lg border-2 border-gray-300 text-tealAction focus:ring-tealAction transition-all"
+                  checked={formData.lavoratore_notturno === 1}
+                  onChange={e => setFormData({...formData, lavoratore_notturno: e.target.checked ? 1 : 0})}
+                />
+                <span className="text-xs font-black text-primary uppercase tracking-tight group-hover:text-tealAction transition-colors">Notturno</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="w-5 h-5 rounded-lg border-2 border-gray-300 text-tealAction focus:ring-tealAction transition-all"
+                  checked={formData.lavoratore_videoterminale === 1}
+                  onChange={e => setFormData({...formData, lavoratore_videoterminale: e.target.checked ? 1 : 0})}
+                />
+                <span className="text-xs font-black text-primary uppercase tracking-tight group-hover:text-tealAction transition-colors">VDT</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="w-5 h-5 rounded-lg border-2 border-gray-300 text-tealAction focus:ring-tealAction transition-all"
+                  checked={formData.lavoratore_straniero === 1}
+                  onChange={e => setFormData({...formData, lavoratore_straniero: e.target.checked ? 1 : 0})}
+                />
+                <span className="text-xs font-black text-primary uppercase tracking-tight group-hover:text-tealAction transition-colors">Straniero</span>
+              </label>
             </div>
 
             {/* Protocollo Sanitario */}
